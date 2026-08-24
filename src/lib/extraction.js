@@ -149,14 +149,14 @@ const COLUMN_ALIASES = {
   amount: ['amount', 'total', 'item net total', 'order total', 'price', 'cost'],
   description: ['description', 'title', 'item', 'item description', 'product', 'standard item name'],
   vendor: ['vendor', 'seller', 'seller name', 'merchant', 'location'],
-  // These have no dedicated Transaction column -- captured into `notes` on
-  // import so nothing from the source sheet is silently dropped.
+  link: ['link', 'url', 'product link'],
   category: ['category', 'internal product category'],
   notes: ['notes'],
   quantity: ['item quantity', 'quantity', 'qty'],
-  order_number: ['item/order #', 'order #', 'order number'],
-  subtotal: ['item subtotal', 'subtotal'],
   unit_price: ['price per item', 'unit price'],
+  // No dedicated Transaction column for this one -- captured into `notes`
+  // on import so it isn't silently dropped.
+  order_number: ['item/order #', 'order #', 'order number'],
 };
 
 function findCol(columns, aliases) {
@@ -259,33 +259,39 @@ function extractFromSpreadsheet(filepath, sheetName) {
     const amt = cols.amount ? coerceAmount(r[cols.amount]) : null;
     const dateVal = cols.date ? coerceDate(r[cols.date]) : null;
     const vendor = cleanStr(cols.vendor ? r[cols.vendor] : null);
+    const link = cleanStr(cols.link ? r[cols.link] : null);
+    const quantity = coerceAmount(cols.quantity ? r[cols.quantity] : null);
+    const unitPrice = coerceAmount(cols.unit_price ? r[cols.unit_price] : null);
 
     // The source sheet's own category column is authoritative -- an admin
     // (or the exporting system) already assigned it, so trust it over the
     // keyword-guessed category instead of just using it as a tie-breaker.
     const explicitCategory = cleanStr(cols.category ? r[cols.category] : null);
+    // Events are almost always one-off (a sponsorship, a conference ticket)
+    // rather than a recurring monthly cost -- default the checkbox on, the
+    // reviewer can still uncheck it.
+    const suggestedCategory = explicitCategory || suggestCategory(desc);
+    const suggestOneTime = suggestedCategory === 'Events';
 
-    // Quantity/order-#/subtotal/unit-price have no dedicated Transaction
-    // column, so fold whichever of them are present into notes rather than
-    // silently dropping them.
+    // Order-# has no dedicated Transaction column, so it goes in notes
+    // rather than being silently dropped. Quantity/unit-price get their own
+    // real columns instead (see extractFromSpreadsheet's return value).
     const noteParts = [];
     const sheetNotes = cleanStr(cols.notes ? r[cols.notes] : null);
     if (sheetNotes) noteParts.push(sheetNotes);
     const orderNumber = cleanStr(cols.order_number ? r[cols.order_number] : null);
     if (orderNumber) noteParts.push(`Order #: ${orderNumber}`);
-    const quantity = cleanStr(cols.quantity ? r[cols.quantity] : null);
-    if (quantity) noteParts.push(`Qty: ${quantity}`);
-    const subtotal = coerceAmount(cols.subtotal ? r[cols.subtotal] : null);
-    if (subtotal !== null) noteParts.push(`Subtotal: $${subtotal.toFixed(2)}`);
-    const unitPrice = coerceAmount(cols.unit_price ? r[cols.unit_price] : null);
-    if (unitPrice !== null) noteParts.push(`Price/item: $${unitPrice.toFixed(2)}`);
 
     return {
       date: dateVal,
       amount: amt,
       description: desc.slice(0, 500),
       vendor,
-      suggested_category: explicitCategory || suggestCategory(desc),
+      link,
+      quantity,
+      unit_price: unitPrice,
+      suggested_category: suggestedCategory,
+      suggest_one_time: suggestOneTime,
       notes: noteParts.join(' | ').slice(0, 500),
       raw_text: desc,
     };
@@ -336,13 +342,15 @@ async function extractTextFromImage(filepath) {
 // the raw OCR/text kept for the human reviewer.
 async function extractFromDocument(filepath, fileType) {
   const text = fileType === 'pdf' ? await extractTextFromPdf(filepath) : await extractTextFromImage(filepath);
+  const suggestedCategory = suggestCategory(text);
 
   return {
     date: parseDateGuess(text),
     amount: parseAmountGuess(text),
     description: guessVendor(text) || path.basename(filepath),
     vendor: guessVendor(text),
-    suggested_category: suggestCategory(text),
+    suggested_category: suggestedCategory,
+    suggest_one_time: suggestedCategory === 'Events',
     raw_text: text.slice(0, 5000),
   };
 }

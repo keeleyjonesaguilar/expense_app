@@ -8,6 +8,7 @@ const { extOf, secureFilename } = require('../lib/util');
 const { UPLOADS_DIR, ALLOWED_IMPORT_EXT, upload } = require('../lib/uploads');
 const { requireAuth, requireAdmin, flash } = require('../middleware/auth');
 const { STATUS_APPROVED, SOURCE_BULK_IMPORT } = require('../constants');
+const { toCsv } = require('../lib/csv');
 
 const router = express.Router();
 router.use(requireAuth, requireAdmin);
@@ -35,6 +36,23 @@ function findOrCreateVendor(name) {
 function previewCachePath(uploadId) {
   return path.join(UPLOADS_DIR, `preview_${uploadId}.json`);
 }
+
+// GET /admin/import/template.csv -- a blank starter file with exactly the
+// header row extraction.js's COLUMN_ALIASES recognizes, plus one clearly
+// marked example row so a future upload is pre-formatted correctly.
+router.get('/admin/import/template.csv', (req, res) => {
+  const header = [
+    'Order Date', 'Internal Product Category', 'Item/Order #', 'Standard Item Name',
+    'Item Quantity', 'Item Subtotal', 'Item Net Total', 'Price per item', 'Location', 'Notes',
+  ];
+  const example = [
+    '2026-01-15', 'Office Supplies', 'EXAMPLE-123', 'EXAMPLE ROW -- delete before uploading',
+    '2', '18.00', '19.28', '9.64', 'Amazon', '',
+  ];
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename="import-template.csv"');
+  res.send(toCsv([header, example]));
+});
 
 // GET/POST /admin/import -- ported from app.py's bulk_import().
 router.get('/admin/import', (req, res) => {
@@ -148,9 +166,9 @@ router.post('/admin/import/:uploadId/commit', (req, res) => {
 
   const insertTx = db.prepare(`
     INSERT INTO transactions
-      (date, amount, description, notes, category_id, vendor_id, is_one_time, source, status,
-       approved_by_id, approved_at, extracted_raw_text)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
+      (date, amount, description, notes, link, quantity, unit_price, category_id, vendor_id,
+       is_one_time, source, status, approved_by_id, approved_at, extracted_raw_text)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
   `);
 
   let imported = 0;
@@ -169,12 +187,20 @@ router.post('/admin/import/:uploadId/commit', (req, res) => {
     const vendorName = (req.body[`vendor_${i}`] || '').trim();
     const vendor = vendorName ? findOrCreateVendor(vendorName) : null;
     const isOneTime = req.body[`one_time_${i}`] !== undefined ? 1 : 0;
+    const quantityStr = req.body[`quantity_${i}`];
+    const unitPriceStr = req.body[`unit_price_${i}`];
+    const quantity = quantityStr !== undefined && quantityStr !== '' ? parseFloat(quantityStr) : null;
+    const unitPrice = unitPriceStr !== undefined && unitPriceStr !== '' ? parseFloat(unitPriceStr) : null;
+    const link = (req.body[`link_${i}`] || '').trim() || null;
 
     insertTx.run(
       dateStr,
       amount,
       (req.body[`description_${i}`] || '').slice(0, 500),
       (req.body[`notes_${i}`] || '').slice(0, 500),
+      link,
+      Number.isFinite(quantity) ? quantity : null,
+      Number.isFinite(unitPrice) ? unitPrice : null,
       catId,
       vendor ? vendor.id : null,
       isOneTime,
