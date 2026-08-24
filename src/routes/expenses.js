@@ -17,9 +17,9 @@ const findVendorByName = db.prepare('SELECT * FROM vendors WHERE name = ?');
 const insertVendor = db.prepare('INSERT INTO vendors (name) VALUES (?)');
 const insertTransaction = db.prepare(`
   INSERT INTO transactions
-    (date, amount, description, notes, category_id, vendor_id, employee_id,
+    (date, amount, description, notes, link, category_id, vendor_id, employee_id,
      is_one_time, source, status, submitted_by_id, receipt_path)
-  VALUES (@date, @amount, @description, @notes, @category_id, @vendor_id, @employee_id,
+  VALUES (@date, @amount, @description, @notes, @link, @category_id, @vendor_id, @employee_id,
           @is_one_time, @source, @status, @submitted_by_id, @receipt_path)
 `);
 const myTransactions = db.prepare(`
@@ -81,6 +81,7 @@ router.post('/submit', requireAuth, upload.single('receipt'), async (req, res) =
   const vendorName = (req.body.vendor_name || '').trim();
   const description = (req.body.description || '').trim();
   const notes = (req.body.notes || '').trim();
+  const link = (req.body.link || '').trim() || null;
   const isOneTime = Boolean(req.body.is_one_time);
   const receiptPath = req.body.receipt_path || null;
 
@@ -109,6 +110,7 @@ router.post('/submit', requireAuth, upload.single('receipt'), async (req, res) =
     amount,
     description,
     notes,
+    link,
     category_id: parseInt(categoryId, 10),
     vendor_id: vendor ? vendor.id : null,
     employee_id: req.currentUser.id,

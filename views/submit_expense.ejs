@@ -31,13 +31,17 @@
       </div>
       <div class="col-md-4 mb-3">
         <label class="form-label">Category *</label>
-        <select name="category_id" class="form-select" required>
+        <select name="category_id" id="category_id" class="form-select" required>
           <option value="">Choose...</option>
           <% categories.forEach(function (c) { %>
             <option value="<%= c.id %>" <%= extracted && extracted.suggested_category === c.name ? 'selected' : '' %>><%= c.name %></option>
           <% }) %>
         </select>
       </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Link (optional)</label>
+      <input type="url" name="link" class="form-control" placeholder="https://...">
     </div>
     <div class="row">
       <div class="col-md-6 mb-3">
@@ -59,7 +63,7 @@
       <textarea name="notes" class="form-control" rows="2" placeholder="e.g. client dinner with ABC Corp, team offsite supplies, etc."></textarea>
     </div>
     <div class="form-check mb-3">
-      <input type="checkbox" class="form-check-input" name="is_one_time" id="one_time">
+      <input type="checkbox" class="form-check-input" name="is_one_time" id="one_time" <%= extracted && extracted.suggest_one_time ? 'checked' : '' %>>
       <label class="form-check-label" for="one_time">This is a one-time purchase (not expected to recur)</label>
     </div>
     <% if (extracted) { %>
@@ -71,4 +75,18 @@
     <button type="submit" class="btn btn-primary">Submit for Approval</button>
   </form>
 </div>
-<%- include('partials/foot') %>
+<%
+const extraScripts = `
+<script>
+(function () {
+  var categorySelect = document.getElementById('category_id');
+  var oneTimeCheckbox = document.getElementById('one_time');
+  categorySelect.addEventListener('change', function () {
+    var text = categorySelect.options[categorySelect.selectedIndex].text;
+    if (text === 'Events') oneTimeCheckbox.checked = true;
+  });
+})();
+</script>
+`;
+%>
+<%- include('partials/foot', { extraScripts }) %>

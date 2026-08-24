@@ -1,13 +1,13 @@
 <%- include('partials/head', { title: 'Request Supplies' }) %>
 <h3 class="mb-3">Request Supplies</h3>
-<p class="text-muted">No login needed — fill this out and it goes straight to the approvals queue.</p>
+<p class="text-muted"><%= intro_text %></p>
 
 <% if (submitted) { %>
 <div class="alert alert-success">Thanks — your request has been submitted for approval.</div>
 <% } %>
 
 <div class="card p-4" style="max-width: 640px;">
-  <form method="post">
+  <form method="post" id="request-form">
     <div class="row">
       <div class="col-md-6 mb-3">
         <label class="form-label">Your Name *</label>
@@ -25,21 +25,45 @@
     <div class="row">
       <div class="col-md-6 mb-3">
         <label class="form-label">Category *</label>
-        <select name="category_id" class="form-select" required>
+        <select name="category_id" id="category_id" class="form-select" required>
           <option value="">Choose...</option>
           <% categories.forEach(function (c) { %><option value="<%= c.id %>"><%= c.name %></option><% }) %>
         </select>
       </div>
       <div class="col-md-6 mb-3">
         <label class="form-label">Quantity</label>
-        <input type="text" name="quantity" class="form-control">
+        <input type="number" step="any" name="quantity" class="form-control">
       </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Link to the item (optional)</label>
+      <input type="url" name="link" class="form-control" placeholder="https://...">
     </div>
     <div class="mb-3">
       <label class="form-label">Anything else we should know?</label>
       <textarea name="justification" class="form-control" rows="2" placeholder="e.g. why you need it, preferred brand, how soon"></textarea>
     </div>
+    <div class="form-check mb-3">
+      <input type="checkbox" class="form-check-input" name="is_one_time" id="is_one_time">
+      <label class="form-check-label" for="is_one_time">This is a one-time purchase (not expected to recur)</label>
+    </div>
     <button type="submit" class="btn btn-primary">Submit Request</button>
   </form>
 </div>
-<%- include('partials/foot') %>
+<%
+const extraScripts = `
+<script>
+// Events are almost always a one-off cost -- default the checkbox on when
+// that category is chosen, but leave it fully editable either way.
+(function () {
+  var categorySelect = document.getElementById('category_id');
+  var oneTimeCheckbox = document.getElementById('is_one_time');
+  categorySelect.addEventListener('change', function () {
+    var text = categorySelect.options[categorySelect.selectedIndex].text;
+    if (text === 'Events') oneTimeCheckbox.checked = true;
+  });
+})();
+</script>
+`;
+%>
+<%- include('partials/foot', { extraScripts }) %>

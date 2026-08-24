@@ -9,7 +9,7 @@
     <div class="row">
       <div class="col-md-6 mb-3">
         <label class="form-label">Category *</label>
-        <select name="category_id" class="form-select" required>
+        <select name="category_id" id="category_id" class="form-select" required>
           <% categories.forEach(function (c) { %><option value="<%= c.id %>"><%= c.name %></option><% }) %>
         </select>
       </div>
@@ -23,6 +23,7 @@
     </div>
     <div class="mb-3"><label class="form-label">Vendor</label><input type="text" name="vendor_name" class="form-control"></div>
     <div class="mb-3"><label class="form-label">Description</label><input type="text" name="description" class="form-control"></div>
+    <div class="mb-3"><label class="form-label">Link (optional)</label><input type="url" name="link" class="form-control" placeholder="https://..."></div>
     <div class="mb-3"><label class="form-label">Notes</label><textarea name="notes" class="form-control" rows="2"></textarea></div>
     <div class="form-check mb-3">
       <input type="checkbox" class="form-check-input" name="is_one_time" id="ot">
@@ -31,4 +32,18 @@
     <button class="btn btn-primary">Add Transaction</button>
   </form>
 </div>
-<%- include('partials/foot') %>
+<%
+const extraScripts = `
+<script>
+(function () {
+  var categorySelect = document.getElementById('category_id');
+  var oneTimeCheckbox = document.getElementById('ot');
+  categorySelect.addEventListener('change', function () {
+    var text = categorySelect.options[categorySelect.selectedIndex].text;
+    if (text === 'Events') oneTimeCheckbox.checked = true;
+  });
+})();
+</script>
+`;
+%>
+<%- include('partials/foot', { extraScripts }) %>
