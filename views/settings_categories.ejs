@@ -1,0 +1,60 @@
+<%- include('partials/head', { title: 'Settings — Categories' }) %>
+<h3 class="mb-3">Settings</h3>
+<ul class="nav nav-tabs mb-4">
+  <li class="nav-item"><a class="nav-link" href="/admin/settings">General</a></li>
+  <li class="nav-item"><a class="nav-link" href="/admin/settings/users">Users</a></li>
+  <li class="nav-item"><a class="nav-link active" href="/admin/settings/categories">Categories</a></li>
+  <li class="nav-item"><a class="nav-link" href="/admin/settings/vendors">Vendors</a></li>
+</ul>
+
+<div class="card p-3 mb-4">
+  <h6>Add Category</h6>
+  <form method="post" action="/admin/settings/categories" class="row g-2 align-items-end">
+    <div class="col-md-4"><label class="form-label small mb-0">Name</label><input type="text" name="name" class="form-control form-control-sm" required></div>
+    <div class="col-md-3">
+      <label class="form-label small mb-0">Kind</label>
+      <select name="kind" class="form-select form-select-sm">
+        <option value="fixed">Fixed</option>
+        <option value="variable">Variable</option>
+        <option value="semi-variable" selected>Semi-Variable</option>
+        <option value="one-time-growth">One-Time / Growth</option>
+        <option value="discretionary">Discretionary</option>
+      </select>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label small mb-0">Default Basis</label>
+      <select name="recurrence_basis" class="form-select form-select-sm">
+        <% recurrence_options.forEach(function (o) { %><option value="<%= o[0] %>" <%= o[0] === 'recurring-monthly' ? 'selected' : '' %>><%= o[1] %></option><% }) %>
+      </select>
+    </div>
+    <div class="col-md-2"><button class="btn btn-primary btn-sm w-100">Add</button></div>
+  </form>
+</div>
+
+<div class="card">
+<table class="table table-sm mb-0">
+  <thead class="table-light"><tr><th>Name</th><th>Kind</th><th>Default Basis</th><th></th></tr></thead>
+  <tbody>
+    <% categories.forEach(function (c) { %>
+    <tr>
+      <form method="post" action="/admin/settings/categories/<%= c.id %>/update" id="cf<%= c.id %>"></form>
+      <td><input type="text" name="name" form="cf<%= c.id %>" value="<%= c.name %>" class="form-control form-control-sm" style="width:220px"></td>
+      <td>
+        <select name="kind" form="cf<%= c.id %>" class="form-select form-select-sm" style="width:170px">
+          <% ['fixed','variable','semi-variable','one-time-growth','discretionary'].forEach(function (k) { %>
+            <option value="<%= k %>" <%= c.kind === k ? 'selected' : '' %>><%= k %></option>
+          <% }) %>
+        </select>
+      </td>
+      <td>
+        <select name="recurrence_basis" form="cf<%= c.id %>" class="form-select form-select-sm" style="width:190px">
+          <% recurrence_options.forEach(function (o) { %><option value="<%= o[0] %>" <%= c.recurrence_basis === o[0] ? 'selected' : '' %>><%= o[1] %></option><% }) %>
+        </select>
+      </td>
+      <td><button class="btn btn-outline-secondary btn-sm" form="cf<%= c.id %>">Save</button></td>
+    </tr>
+    <% }) %>
+  </tbody>
+</table>
+</div>
+<%- include('partials/foot') %>

@@ -1,0 +1,25 @@
+<%- include('partials/head', { title: 'Settings' }) %>
+<h3 class="mb-3">Settings</h3>
+<ul class="nav nav-tabs mb-4">
+  <li class="nav-item"><a class="nav-link active" href="/admin/settings">General</a></li>
+  <li class="nav-item"><a class="nav-link" href="/admin/settings/users">Users</a></li>
+  <li class="nav-item"><a class="nav-link" href="/admin/settings/categories">Categories</a></li>
+  <li class="nav-item"><a class="nav-link" href="/admin/settings/vendors">Vendors</a></li>
+</ul>
+
+<div class="card p-4" style="max-width:700px;">
+  <form method="post">
+    <div class="mb-3">
+      <label class="form-label">Company Headcount</label>
+      <input type="number" min="0" step="1" name="employee_count" class="form-control" style="max-width:200px" value="<%= headcount %>">
+      <div class="form-text">Used for per-employee budget figures elsewhere in the app.</div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Request Supplies — intro text</label>
+      <textarea name="request_form_intro" class="form-control" rows="2"><%= request_form_intro %></textarea>
+      <div class="form-text">Shown at the top of the public <a href="/request-supplies" target="_blank">Request Supplies</a> form.</div>
+    </div>
+    <button class="btn btn-primary">Save</button>
+  </form>
+</div>
+<%- include('partials/foot') %>

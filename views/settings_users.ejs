@@ -1,0 +1,51 @@
+<%- include('partials/head', { title: 'Settings — Users' }) %>
+<h3 class="mb-3">Settings</h3>
+<ul class="nav nav-tabs mb-4">
+  <li class="nav-item"><a class="nav-link" href="/admin/settings">General</a></li>
+  <li class="nav-item"><a class="nav-link active" href="/admin/settings/users">Users</a></li>
+  <li class="nav-item"><a class="nav-link" href="/admin/settings/categories">Categories</a></li>
+  <li class="nav-item"><a class="nav-link" href="/admin/settings/vendors">Vendors</a></li>
+</ul>
+
+<div class="card p-3 mb-4">
+  <h6>Add User</h6>
+  <form method="post" action="/admin/settings/users" class="row g-2 align-items-end">
+    <div class="col-md-3"><label class="form-label small mb-0">Name</label><input type="text" name="name" class="form-control form-control-sm" required></div>
+    <div class="col-md-3"><label class="form-label small mb-0">Email</label><input type="email" name="email" class="form-control form-control-sm" required></div>
+    <div class="col-md-2"><label class="form-label small mb-0">Department</label><input type="text" name="department" class="form-control form-control-sm"></div>
+    <div class="col-md-2">
+      <label class="form-label small mb-0">Role</label>
+      <select name="role" class="form-select form-select-sm">
+        <option value="employee">Employee</option>
+        <option value="admin">Admin</option>
+      </select>
+    </div>
+    <div class="col-md-2"><label class="form-label small mb-0">Password</label><input type="password" name="password" minlength="6" class="form-control form-control-sm" required></div>
+    <div class="col-12"><button class="btn btn-primary btn-sm">Add User</button></div>
+  </form>
+</div>
+
+<div class="card">
+<table class="table table-sm mb-0">
+  <thead class="table-light"><tr><th>Name</th><th>Email</th><th>Department</th><th>Role</th><th></th></tr></thead>
+  <tbody>
+    <% users.forEach(function (u) { %>
+    <tr>
+      <form method="post" action="/admin/settings/users/<%= u.id %>/update" id="uf<%= u.id %>"></form>
+      <td><%= u.name %></td>
+      <td><%= u.email %></td>
+      <td><input type="text" name="department" form="uf<%= u.id %>" value="<%= u.department || '' %>" class="form-control form-control-sm" style="width:140px"></td>
+      <td>
+        <select name="role" form="uf<%= u.id %>" class="form-select form-select-sm" style="width:120px">
+          <option value="employee" <%= u.role === 'employee' ? 'selected' : '' %>>Employee</option>
+          <option value="admin" <%= u.role === 'admin' ? 'selected' : '' %>>Admin</option>
+        </select>
+      </td>
+      <td><button class="btn btn-outline-secondary btn-sm" form="uf<%= u.id %>">Save</button></td>
+    </tr>
+    <% }) %>
+  </tbody>
+</table>
+</div>
+<p class="text-muted small mt-2">Users can't be deleted here — removing one would orphan the transactions they submitted or incurred.</p>
+<%- include('partials/foot') %>
