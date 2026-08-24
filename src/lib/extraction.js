@@ -147,8 +147,16 @@ function guessVendor(text) {
 const COLUMN_ALIASES = {
   date: ['date', 'order date', 'transaction date', 'purchase date'],
   amount: ['amount', 'total', 'item net total', 'order total', 'price', 'cost'],
-  description: ['description', 'title', 'item', 'item description', 'product'],
-  vendor: ['vendor', 'seller', 'seller name', 'merchant'],
+  description: ['description', 'title', 'item', 'item description', 'product', 'standard item name'],
+  vendor: ['vendor', 'seller', 'seller name', 'merchant', 'location'],
+  // These have no dedicated Transaction column -- captured into `notes` on
+  // import so nothing from the source sheet is silently dropped.
+  category: ['category', 'internal product category'],
+  notes: ['notes'],
+  quantity: ['item quantity', 'quantity', 'qty'],
+  order_number: ['item/order #', 'order #', 'order number'],
+  subtotal: ['item subtotal', 'subtotal'],
+  unit_price: ['price per item', 'unit price'],
 };
 
 function findCol(columns, aliases) {
@@ -160,14 +168,24 @@ function findCol(columns, aliases) {
   return null;
 }
 
+// Spreadsheet exports like Amazon order histories use "N/a" as a blank
+// placeholder in cells that don't apply to a given row (e.g. quantity on a
+// sponsorship line item). Treat that the same as an empty cell everywhere.
+function cleanStr(value) {
+  if (value === null || value === undefined) return null;
+  const s = String(value).trim();
+  if (!s || /^n\/?a$/i.test(s)) return null;
+  return s;
+}
+
 function coerceAmount(value) {
-  if (value === null || value === undefined || value === '') return null;
-  const n = typeof value === 'number' ? value : parseFloat(String(value).replace(/[$,]/g, ''));
+  const s = cleanStr(value);
+  if (s === null && typeof value !== 'number') return null;
+  const n = typeof value === 'number' ? value : parseFloat(s.replace(/[$,]/g, ''));
   return Number.isFinite(n) ? n : null;
 }
 
 function coerceDate(value) {
-  if (value === null || value === undefined || value === '') return null;
   if (value instanceof Date) return toISODate(value);
   if (typeof value === 'number') {
     // Excel serial date (days since 1899-12-30).
@@ -175,43 +193,100 @@ function coerceDate(value) {
     const dt = new Date(epoch + value * 86400000);
     return toISODate(dt);
   }
-  return toISODate(String(value));
+  const s = cleanStr(value);
+  return s === null ? null : toISODate(s);
+}
+
+// A sheet "looks like" a transaction log if its header row has both a
+// recognizable date column and a recognizable amount column -- distinguishes
+// e.g. a workbook's "2025"/"2026" transaction-log tabs from a plain
+// single-column "Categories" list or other summary tabs that happen to share
+// the same workbook.
+function sheetLooksLikeTransactions(headerRow) {
+  const cols = headerRow.map((c) => String(c || '').toLowerCase().trim());
+  const hasAlias = (aliases) => aliases.some((a) => cols.includes(a));
+  return hasAlias(COLUMN_ALIASES.date) && hasAlias(COLUMN_ALIASES.amount);
+}
+
+// Lists sheet names in an xlsx/xls workbook, flagging which ones look like
+// transaction logs (see above) so callers can default to a sensible sheet
+// and still let a human override it for an unusual workbook layout. Returns
+// null for CSVs, which have no concept of multiple sheets.
+function listSpreadsheetSheets(filepath) {
+  if (filepath.toLowerCase().endsWith('.csv')) return null;
+  const workbook = XLSX.readFile(filepath);
+  return workbook.SheetNames.map((name) => {
+    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[name], { header: 1, raw: true, blankrows: false });
+    return {
+      name,
+      rowCount: Math.max(0, rows.length - 1),
+      looksLikeTransactions: rows.length > 0 && sheetLooksLikeTransactions(rows[0]),
+    };
+  });
 }
 
 // Returns a list of dict rows: date, amount, description, vendor, suggested_category.
-function extractFromSpreadsheet(filepath) {
+// `sheetName`, for xlsx/xls, picks a specific sheet -- if omitted, the first
+// sheet that looks like a transaction log wins (see sheetLooksLikeTransactions),
+// falling back to the first sheet in the workbook if none do.
+function extractFromSpreadsheet(filepath, sheetName) {
   let records;
   if (filepath.toLowerCase().endsWith('.csv')) {
     const content = fs.readFileSync(filepath, 'utf8');
     records = parseCsv(content, { columns: true, skip_empty_lines: true, relax_column_count: true });
   } else {
     const workbook = XLSX.readFile(filepath);
-    const sheetName = workbook.SheetNames[0];
-    records = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: null, raw: true });
+    let name = sheetName && workbook.SheetNames.includes(sheetName) ? sheetName : null;
+    if (!name) {
+      name = workbook.SheetNames.find((n) => {
+        const rows = XLSX.utils.sheet_to_json(workbook.Sheets[n], { header: 1, raw: true, blankrows: false });
+        return rows.length > 0 && sheetLooksLikeTransactions(rows[0]);
+      });
+    }
+    if (!name) name = workbook.SheetNames[0];
+    records = XLSX.utils.sheet_to_json(workbook.Sheets[name], { defval: null, raw: true });
   }
 
   if (!records.length) return [];
   const columns = Object.keys(records[0]);
-  const cols = {
-    date: findCol(columns, COLUMN_ALIASES.date),
-    amount: findCol(columns, COLUMN_ALIASES.amount),
-    description: findCol(columns, COLUMN_ALIASES.description),
-    vendor: findCol(columns, COLUMN_ALIASES.vendor),
-  };
+  const cols = {};
+  for (const key of Object.keys(COLUMN_ALIASES)) {
+    cols[key] = findCol(columns, COLUMN_ALIASES[key]);
+  }
 
   return records.map((r) => {
-    const desc = cols.description && r[cols.description] != null ? String(r[cols.description]) : '';
+    const desc = cleanStr(cols.description ? r[cols.description] : null) || '';
     const amt = cols.amount ? coerceAmount(r[cols.amount]) : null;
     const dateVal = cols.date ? coerceDate(r[cols.date]) : null;
-    const vendorRaw = cols.vendor ? r[cols.vendor] : null;
-    const vendor = vendorRaw !== null && vendorRaw !== undefined && vendorRaw !== '' ? String(vendorRaw) : null;
+    const vendor = cleanStr(cols.vendor ? r[cols.vendor] : null);
+
+    // The source sheet's own category column is authoritative -- an admin
+    // (or the exporting system) already assigned it, so trust it over the
+    // keyword-guessed category instead of just using it as a tie-breaker.
+    const explicitCategory = cleanStr(cols.category ? r[cols.category] : null);
+
+    // Quantity/order-#/subtotal/unit-price have no dedicated Transaction
+    // column, so fold whichever of them are present into notes rather than
+    // silently dropping them.
+    const noteParts = [];
+    const sheetNotes = cleanStr(cols.notes ? r[cols.notes] : null);
+    if (sheetNotes) noteParts.push(sheetNotes);
+    const orderNumber = cleanStr(cols.order_number ? r[cols.order_number] : null);
+    if (orderNumber) noteParts.push(`Order #: ${orderNumber}`);
+    const quantity = cleanStr(cols.quantity ? r[cols.quantity] : null);
+    if (quantity) noteParts.push(`Qty: ${quantity}`);
+    const subtotal = coerceAmount(cols.subtotal ? r[cols.subtotal] : null);
+    if (subtotal !== null) noteParts.push(`Subtotal: $${subtotal.toFixed(2)}`);
+    const unitPrice = coerceAmount(cols.unit_price ? r[cols.unit_price] : null);
+    if (unitPrice !== null) noteParts.push(`Price/item: $${unitPrice.toFixed(2)}`);
 
     return {
       date: dateVal,
       amount: amt,
       description: desc.slice(0, 500),
       vendor,
-      suggested_category: suggestCategory(desc),
+      suggested_category: explicitCategory || suggestCategory(desc),
+      notes: noteParts.join(' | ').slice(0, 500),
       raw_text: desc,
     };
   });
@@ -277,6 +352,7 @@ module.exports = {
   parseDateGuess,
   parseAmountGuess,
   guessVendor,
+  listSpreadsheetSheets,
   extractFromSpreadsheet,
   extractFromDocument,
   extractTextFromPdf,

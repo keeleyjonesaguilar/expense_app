@@ -23,7 +23,11 @@ app.set('views', path.join(__dirname, 'views'));
 // /static/vendor/... (was url_for('static', filename='vendor/...')).
 app.use('/static', express.static(path.join(__dirname, 'public')));
 
-app.use(express.urlencoded({ extended: true }));
+// The bulk-import commit form posts several fields per row (date/amount/
+// category/vendor/description/notes) -- a few hundred imported rows easily
+// exceeds Express's default 1000-parameter cap, so raise it well past what
+// even a large spreadsheet import would need.
+app.use(express.urlencoded({ extended: true, limit: '10mb', parameterLimit: 100000 }));
 
 app.use(
   session({
@@ -82,7 +86,14 @@ app.use(require('./src/routes/data'));
 app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
   console.error(err);
   if (res.headersSent) return next(err);
-  res.status(500).render('error', { title: 'Error', message: 'Something went wrong.' });
+  // An error thrown by early middleware (e.g. body-parser, before attachUser
+  // runs) means res.locals.currentUser was never set -- the error view (via
+  // partials/head) needs it regardless of where the request failed.
+  if (!res.locals.currentUser) {
+    res.locals.currentUser = { is_authenticated: false, is_admin: false, name: null, role: null, id: null };
+  }
+  const status = err.status || err.statusCode || 500;
+  res.status(status).render('error', { title: 'Error', message: 'Something went wrong.' });
 });
 
 const PORT = process.env.PORT || 5051;

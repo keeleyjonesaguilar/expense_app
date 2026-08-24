@@ -88,7 +88,7 @@ new Chart(document.getElementById('monthChart'), {
   </div>
 </div>
 
-<div class="card p-3">
+<div class="card p-3 mb-4">
   <h6>Top Vendors</h6>
   <table class="table table-sm">
     <thead><tr><th>Vendor</th><th class="text-end">Total Spend</th></tr></thead>
@@ -99,5 +99,26 @@ new Chart(document.getElementById('monthChart'), {
     </tbody>
   </table>
 </div>
+
+<% if (year_over_year && year_over_year.length) { %>
+<div class="card p-3">
+  <h6>Year-over-Year by Category</h6>
+  <table class="table table-sm">
+    <thead><tr><th>Category</th><th class="text-end"><%= prev_year %></th><th class="text-end"><%= curr_year %></th><th class="text-end">Change</th></tr></thead>
+    <tbody>
+      <% year_over_year.forEach(function (row) { %>
+      <tr>
+        <td><%= row.name %></td>
+        <td class="text-end">$<%= fmtMoney(row.prev) %></td>
+        <td class="text-end">$<%= fmtMoney(row.curr) %></td>
+        <td class="text-end <%= row.change > 0 ? 'text-danger' : row.change < 0 ? 'text-success' : 'text-muted' %>">
+          <%= row.change > 0 ? '+$' + fmtMoney(row.change) : row.change < 0 ? '-$' + fmtMoney(-row.change) : '$' + fmtMoney(0) %>
+        </td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+<% } %>
 
 <%- include('partials/foot', { extraScripts }) %>

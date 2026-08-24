@@ -4,6 +4,8 @@ npm-debug.log*
 
 # Database (local dev data -- never commit real spend/employee data)
 instance/*.db
+instance/*.db-shm
+instance/*.db-wal
 instance/*.sqlite3
 
 # Uploaded files (receipts and bulk-import files -- may contain sensitive data)

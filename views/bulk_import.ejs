@@ -9,12 +9,31 @@
   </form>
 </div>
 
+<% if (sheets && sheets.length > 1) { %>
+<div class="card p-3 mb-4">
+  <form method="get" action="/admin/import" class="row g-2 align-items-end">
+    <input type="hidden" name="upload_id" value="<%= upload_id %>">
+    <div class="col-md-6">
+      <label class="form-label mb-1">This workbook has multiple sheets -- pick one to import from</label>
+      <select name="sheet" class="form-select">
+        <% sheets.forEach(function (s) { %>
+          <option value="<%= s.name %>" <%= s.name === current_sheet ? 'selected' : '' %>>
+            <%= s.name %> (<%= s.rowCount %> rows<%= s.looksLikeTransactions ? '' : ' -- no date/amount columns found' %>)
+          </option>
+        <% }) %>
+      </select>
+    </div>
+    <div class="col-md-3"><button class="btn btn-outline-primary">Use this sheet</button></div>
+  </form>
+</div>
+<% } %>
+
 <% if (preview_rows) { %>
 <form method="post" action="/admin/import/<%= upload_id %>/commit">
   <div class="card p-3">
     <h6>Review before importing (<%= preview_rows.length %> rows)</h6>
     <table class="table table-sm">
-      <thead><tr><th>Skip</th><th>Date</th><th>Amount</th><th>Category</th><th>Vendor</th><th>Description</th><th>One-Time</th></tr></thead>
+      <thead><tr><th>Skip</th><th>Date</th><th>Amount</th><th>Category</th><th>Vendor</th><th>Description</th><th>Notes</th><th>One-Time</th></tr></thead>
       <tbody>
       <% preview_rows.forEach(function (row, i) { %>
         <tr>
@@ -28,6 +47,7 @@
           </td>
           <td><input type="text" name="vendor_<%= i %>" value="<%= row.vendor || '' %>" class="form-control form-control-sm" style="width:120px"></td>
           <td><input type="text" name="description_<%= i %>" value="<%= row.description || '' %>" class="form-control form-control-sm" style="width:200px"></td>
+          <td><input type="text" name="notes_<%= i %>" value="<%= row.notes || '' %>" class="form-control form-control-sm" style="width:180px"></td>
           <td><input type="checkbox" name="one_time_<%= i %>"></td>
         </tr>
       <% }) %>

@@ -14,9 +14,11 @@ router.use(requireAuth, requireAdmin);
 
 const listCategories = db.prepare('SELECT * FROM categories ORDER BY name');
 const listRecentUploads = db.prepare('SELECT * FROM uploads ORDER BY uploaded_at DESC LIMIT 10');
+const getUpload = db.prepare('SELECT * FROM uploads WHERE id = ?');
 const insertUpload = db.prepare(
-  'INSERT INTO uploads (filename, file_type, uploaded_by_id, row_count) VALUES (?, ?, ?, ?)'
+  'INSERT INTO uploads (filename, stored_filename, file_type, uploaded_by_id, row_count) VALUES (?, ?, ?, ?, ?)'
 );
+const updateUploadRowCount = db.prepare('UPDATE uploads SET row_count = ? WHERE id = ?');
 const findVendorByName = db.prepare('SELECT * FROM vendors WHERE name = ?');
 const insertVendor = db.prepare('INSERT INTO vendors (name) VALUES (?)');
 
@@ -38,7 +40,29 @@ function previewCachePath(uploadId) {
 router.get('/admin/import', (req, res) => {
   const uploadId = req.query.upload_id ? parseInt(req.query.upload_id, 10) : null;
   let previewRows = null;
+  let sheets = null;
+  let currentSheet = req.query.sheet || null;
+
   if (uploadId) {
+    const uploadRow = getUpload.get(uploadId);
+
+    // A workbook with more than one sheet (e.g. a multi-year export with a
+    // transaction log per year plus summary tabs) needs a human to pick the
+    // right one -- list them so the template can render a picker, and
+    // re-extract when a different sheet is chosen via ?sheet=.
+    if (uploadRow && uploadRow.file_type === 'spreadsheet' && uploadRow.stored_filename) {
+      const storedPath = path.join(UPLOADS_DIR, uploadRow.stored_filename);
+      if (fs.existsSync(storedPath)) {
+        sheets = extraction.listSpreadsheetSheets(storedPath);
+        if (sheets && req.query.sheet) {
+          const rows = extraction.extractFromSpreadsheet(storedPath, req.query.sheet);
+          fs.writeFileSync(previewCachePath(uploadId), JSON.stringify(rows));
+          updateUploadRowCount.run(rows.length, uploadId);
+          if (!currentSheet) currentSheet = req.query.sheet;
+        }
+      }
+    }
+
     const cachePath = previewCachePath(uploadId);
     if (fs.existsSync(cachePath)) {
       previewRows = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
@@ -50,6 +74,8 @@ router.get('/admin/import', (req, res) => {
     categories: listCategories.all(),
     preview_rows: previewRows,
     upload_id: uploadId,
+    sheets,
+    current_sheet: currentSheet,
     recent_uploads: listRecentUploads.all(),
   });
 });
@@ -73,9 +99,22 @@ router.post('/admin/import', upload.single('file'), async (req, res) => {
 
   let rows;
   let fileType;
+  let defaultSheet = null;
   if (['csv', 'xlsx', 'xls'].includes(extn)) {
     rows = extraction.extractFromSpreadsheet(destPath);
     fileType = 'spreadsheet';
+    if (extn !== 'csv') {
+      const sheets = extraction.listSpreadsheetSheets(destPath);
+      const picked = sheets.find((s) => s.looksLikeTransactions) || sheets[0];
+      defaultSheet = picked ? picked.name : null;
+      if (sheets.length > 1) {
+        flash(
+          req,
+          'info',
+          `This workbook has ${sheets.length} sheets -- showing "${defaultSheet}". Use the sheet picker below to import a different one.`
+        );
+      }
+    }
   } else if (extn === 'pdf') {
     rows = [await extraction.extractFromDocument(destPath, 'pdf')];
     fileType = 'pdf';
@@ -84,14 +123,15 @@ router.post('/admin/import', upload.single('file'), async (req, res) => {
     fileType = 'image';
   }
 
-  const info = insertUpload.run(file.originalname, fileType, req.currentUser.id, rows.length);
+  const info = insertUpload.run(file.originalname, fname, fileType, req.currentUser.id, rows.length);
   const uploadId = info.lastInsertRowid;
 
   // Stash rows in a simple file-based cache keyed by upload id -- mirrors the
   // Python version's approach (no session-based store needed for this size).
   fs.writeFileSync(previewCachePath(uploadId), JSON.stringify(rows));
 
-  res.redirect(`/admin/import?upload_id=${uploadId}`);
+  const sheetParam = defaultSheet ? `&sheet=${encodeURIComponent(defaultSheet)}` : '';
+  res.redirect(`/admin/import?upload_id=${uploadId}${sheetParam}`);
 });
 
 router.post('/admin/import/:uploadId/commit', (req, res) => {
@@ -108,9 +148,9 @@ router.post('/admin/import/:uploadId/commit', (req, res) => {
 
   const insertTx = db.prepare(`
     INSERT INTO transactions
-      (date, amount, description, category_id, vendor_id, is_one_time, source, status,
+      (date, amount, description, notes, category_id, vendor_id, is_one_time, source, status,
        approved_by_id, approved_at, extracted_raw_text)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
   `);
 
   let imported = 0;
@@ -134,6 +174,7 @@ router.post('/admin/import/:uploadId/commit', (req, res) => {
       dateStr,
       amount,
       (req.body[`description_${i}`] || '').slice(0, 500),
+      (req.body[`notes_${i}`] || '').slice(0, 500),
       catId,
       vendor ? vendor.id : null,
       isOneTime,

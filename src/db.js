@@ -107,6 +107,7 @@ function createSchema() {
     CREATE TABLE IF NOT EXISTS uploads (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       filename TEXT,
+      stored_filename TEXT,
       file_type TEXT,
       uploaded_by_id INTEGER REFERENCES users(id),
       uploaded_at TEXT DEFAULT (datetime('now')),
@@ -198,6 +199,15 @@ function bootstrapAdmin() {
 }
 
 createSchema();
+
+// Defensive migration for a column added after the uploads table may already
+// exist on a deployed disk (CREATE TABLE IF NOT EXISTS won't add it).
+try {
+  db.exec('ALTER TABLE uploads ADD COLUMN stored_filename TEXT');
+} catch (err) {
+  if (!/duplicate column/i.test(err.message)) throw err;
+}
+
 seedCategories();
 bootstrapAdmin();
 

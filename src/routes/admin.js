@@ -82,6 +82,33 @@ router.get('/admin', (req, res) => {
   const byEmployeeSorted = sortDesc(byEmployee);
   const monthsSorted = [...byMonth.entries()].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
 
+  // Year-over-year by category, mirroring the "Year vs. Year" sheet from the
+  // spreadsheet this app's data model was based on: for the two most recent
+  // years present in the data, total spend per category side by side with
+  // the year-over-year change.
+  const years = [...new Set(txs.filter((t) => t.date).map((t) => t.date.slice(0, 4)))].sort();
+  const [prevYear, currYear] = years.slice(-2);
+  let yearOverYear = [];
+  if (prevYear && currYear) {
+    const byCategoryYear = new Map();
+    for (const t of txs) {
+      if (!t.date) continue;
+      const year = t.date.slice(0, 4);
+      if (year !== prevYear && year !== currYear) continue;
+      const catName = t.category ? t.category.name : 'Uncategorized';
+      if (!byCategoryYear.has(catName)) byCategoryYear.set(catName, { [prevYear]: 0, [currYear]: 0 });
+      byCategoryYear.get(catName)[year] += t.amount;
+    }
+    yearOverYear = [...byCategoryYear.entries()]
+      .map(([name, totals]) => ({
+        name,
+        prev: totals[prevYear],
+        curr: totals[currYear],
+        change: totals[currYear] - totals[prevYear],
+      }))
+      .sort((a, b) => b.curr - a.curr);
+  }
+
   res.render('admin_dashboard', {
     title: 'Dashboard',
     total_spend: totalSpend,
@@ -92,6 +119,9 @@ router.get('/admin', (req, res) => {
     top_vendors: topVendors,
     by_employee: byEmployeeSorted,
     months_sorted: monthsSorted,
+    year_over_year: yearOverYear,
+    prev_year: prevYear,
+    curr_year: currYear,
   });
 });
 
