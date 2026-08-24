@@ -1,14 +1,21 @@
 const express = require('express');
 const db = require('../db');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
-const { STATUS_APPROVED } = require('../constants');
+const { STATUS_APPROVED, STATUS_PENDING, STATUS_AWAITING_ORDER } = require('../constants');
 
 const router = express.Router();
 router.use(requireAuth, requireAdmin);
 
 const listCategories = db.prepare('SELECT * FROM categories ORDER BY name');
 
-// GET /admin/forecast -- ported from app.py's forecast().
+// GET /admin/forecast -- ported from app.py's forecast(), then revised:
+// the original "YTD annualized" signal (methodB) badly overshoots early in
+// a calendar year (e.g. in February, "annualize 1 month of data" is wild),
+// so it's replaced with a rolling trailing-12-months actual total, which is
+// already a 12-month figure and needs no annualizing multiply. A separate
+// "Pipeline" figure (pending + awaiting-order spend in that category) is
+// shown alongside the recommendation rather than folded into it, so
+// approving/ordering a request later doesn't double-count it.
 router.get('/admin/forecast', (req, res) => {
   const growthFactor = req.query.growth_factor !== undefined ? parseFloat(req.query.growth_factor) : 1.0;
   const growth = Number.isFinite(growthFactor) ? growthFactor : 1.0;
@@ -22,35 +29,41 @@ router.get('/admin/forecast', (req, res) => {
     )
     .all(STATUS_APPROVED);
 
-  const byCatYear = new Map(); // catName -> Map(year -> total)
-  const yearsSeen = new Set();
+  const now = new Date();
+  const todayIso = now.toISOString().slice(0, 10);
+  const trailing12moStartIso = new Date(now.getTime() - 365 * 86400000).toISOString().slice(0, 10);
+
+  const currentYear = now.getUTCFullYear();
+  const priorYear = currentYear - 1;
+
+  const byCatPriorYear = new Map(); // catName -> prior calendar year total (non-one-time)
+  const byCatTrailing12mo = new Map(); // catName -> trailing-365-day total (non-one-time)
 
   for (const t of txs) {
-    if (!t.date || !t.category_name) continue;
+    if (!t.date || !t.category_name || t.is_one_time) continue;
+    if (t.date >= trailing12moStartIso && t.date <= todayIso) {
+      byCatTrailing12mo.set(t.category_name, (byCatTrailing12mo.get(t.category_name) || 0) + t.amount);
+    }
     const year = parseInt(t.date.slice(0, 4), 10);
-    yearsSeen.add(year);
-    if (t.is_one_time) continue;
-    if (!byCatYear.has(t.category_name)) byCatYear.set(t.category_name, new Map());
-    const yearMap = byCatYear.get(t.category_name);
-    yearMap.set(year, (yearMap.get(year) || 0) + t.amount);
+    if (year === priorYear) {
+      byCatPriorYear.set(t.category_name, (byCatPriorYear.get(t.category_name) || 0) + t.amount);
+    }
   }
 
-  const currentYear = yearsSeen.size ? Math.max(...yearsSeen) : new Date().getFullYear();
-  const priorYear = currentYear - 1;
-  const jan1 = Date.UTC(currentYear, 0, 1);
-  const now = new Date();
-  const today =
-    now.getUTCFullYear() === currentYear ? Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) : Date.UTC(currentYear, 11, 31);
-  const elapsedDays = Math.max(Math.round((today - jan1) / 86400000) + 1, 1);
-  const elapsedMonths = elapsedDays / 30.44;
+  const pipelineByCategoryId = new Map();
+  for (const row of db
+    .prepare('SELECT category_id, SUM(amount) AS total FROM transactions WHERE status IN (?, ?) GROUP BY category_id')
+    .all(STATUS_PENDING, STATUS_AWAITING_ORDER)) {
+    if (row.category_id != null) pipelineByCategoryId.set(row.category_id, row.total);
+  }
 
   const forecastRows = [];
   for (const cat of listCategories.all()) {
-    const yearMap = byCatYear.get(cat.name) || new Map();
-    const prior = yearMap.get(priorYear) || 0;
-    const ytd = yearMap.get(currentYear) || 0;
+    const prior = byCatPriorYear.get(cat.name) || 0;
+    const trailing12mo = byCatTrailing12mo.get(cat.name) || 0;
     const methodA = prior * growth;
-    const methodB = ytd ? (ytd / elapsedMonths) * 12 : 0;
+    const methodB = trailing12mo;
+    const pipeline = pipelineByCategoryId.get(cat.id) || 0;
 
     let rec;
     let basis;
@@ -62,17 +75,17 @@ router.get('/admin/forecast', (req, res) => {
       basis = "One-time/growth category: 10% of this year's one-time spend, floored at 15% of prior year actual.";
     } else {
       rec = round2(Math.max(methodA, methodB));
-      basis = `max(prior x ${growth}, YTD annualized)`;
+      basis = `max(prior year x ${growth}, trailing 12mo actual)`;
     }
 
     forecastRows.push({
       category: cat.name,
       prior_year: priorYear,
       prior_total: round2(prior),
-      current_year: currentYear,
-      ytd_total: round2(ytd),
+      trailing12mo_total: round2(trailing12mo),
       method_a: round2(methodA),
       method_b: round2(methodB),
+      pipeline: round2(pipeline),
       recommended_annual: rec,
       recommended_monthly: round2(rec / 12),
       basis,
@@ -81,12 +94,14 @@ router.get('/admin/forecast', (req, res) => {
 
   forecastRows.sort((a, b) => b.recommended_annual - a.recommended_annual);
   const totalAnnual = round2(forecastRows.reduce((sum, r) => sum + r.recommended_annual, 0));
+  const totalPipeline = round2(forecastRows.reduce((sum, r) => sum + r.pipeline, 0));
 
   res.render('forecast', {
     title: 'Forecast',
     rows: forecastRows,
     growth_factor: growth,
     total_annual: totalAnnual,
+    total_pipeline: totalPipeline,
     current_year: currentYear,
     prior_year: priorYear,
   });

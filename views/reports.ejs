@@ -1,0 +1,70 @@
+<%- include('partials/head', { title: 'Reports' }) %>
+<style>
+  @media print {
+    nav, .no-print { display: none !important; }
+    .card { border: 1px solid #ccc !important; }
+    body { background: #fff !important; }
+  }
+</style>
+<div class="d-flex justify-content-between align-items-center mb-3 no-print">
+  <h3 class="mb-0">Spend Report</h3>
+  <div>
+    <a href="/admin/reports/export.csv" class="btn btn-outline-secondary btn-sm">Download CSV</a>
+    <button type="button" class="btn btn-primary btn-sm" onclick="window.print()">Print / Save as PDF</button>
+  </div>
+</div>
+
+<div class="mb-4">
+  <h2 class="mb-1">Corporate Spend Report</h2>
+  <p class="text-muted">Generated <%= generated_at %></p>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-4"><div class="stat-tile"><div class="label">Total Approved Spend</div><div class="value">$<%= fmtMoney(total_spend) %></div></div></div>
+  <div class="col-md-4"><div class="stat-tile"><div class="label">Recurring Spend</div><div class="value">$<%= fmtMoney(recurring_total) %></div></div></div>
+  <div class="col-md-4"><div class="stat-tile"><div class="label">One-Time Spend</div><div class="value">$<%= fmtMoney(onetime_total) %></div></div></div>
+</div>
+
+<div class="card p-3 mb-4">
+  <h6>Spend by Category</h6>
+  <table class="table table-sm mb-0">
+    <thead><tr><th>Category</th><th class="text-end">Total Spend</th></tr></thead>
+    <tbody>
+      <% top_categories.forEach(function (pair) { %>
+      <tr><td><%= pair[0] %></td><td class="text-end">$<%= fmtMoney(pair[1]) %></td></tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+
+<% if (year_over_year && year_over_year.length) { %>
+<div class="card p-3 mb-4">
+  <h6>Year-over-Year by Category</h6>
+  <table class="table table-sm mb-0">
+    <thead><tr><th>Category</th><th class="text-end"><%= prev_year %></th><th class="text-end"><%= curr_year %></th><th class="text-end">Change</th></tr></thead>
+    <tbody>
+      <% year_over_year.forEach(function (row) { %>
+      <tr>
+        <td><%= row.name %></td>
+        <td class="text-end">$<%= fmtMoney(row.prev) %></td>
+        <td class="text-end">$<%= fmtMoney(row.curr) %></td>
+        <td class="text-end"><%= row.change > 0 ? '+$' + fmtMoney(row.change) : row.change < 0 ? '-$' + fmtMoney(-row.change) : '$' + fmtMoney(0) %></td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+<% } %>
+
+<div class="card p-3">
+  <h6>Top Vendors</h6>
+  <table class="table table-sm mb-0">
+    <thead><tr><th>Vendor</th><th class="text-end">Total Spend</th></tr></thead>
+    <tbody>
+      <% top_vendors.forEach(function (pair) { %>
+      <tr><td><%= pair[0] %></td><td class="text-end">$<%= fmtMoney(pair[1]) %></td></tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+<%- include('partials/foot') %>

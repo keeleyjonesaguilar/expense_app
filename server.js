@@ -79,6 +79,8 @@ app.use(require('./src/routes/admin'));
 app.use(require('./src/routes/bulkImport'));
 app.use(require('./src/routes/forecast'));
 app.use(require('./src/routes/marketing'));
+app.use(require('./src/routes/settings'));
+app.use(require('./src/routes/reports'));
 app.use(require('./src/routes/data'));
 
 // Centralized error handler -- an uncaught error here would otherwise crash
