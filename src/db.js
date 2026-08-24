@@ -70,7 +70,8 @@ function createSchema() {
     CREATE TABLE IF NOT EXISTS categories (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE,
-      kind TEXT NOT NULL DEFAULT 'semi-variable'
+      kind TEXT NOT NULL DEFAULT 'semi-variable',
+      recurrence_basis TEXT NOT NULL DEFAULT 'recurring-monthly'
     );
 
     CREATE TABLE IF NOT EXISTS vendors (
@@ -85,6 +86,9 @@ function createSchema() {
       amount REAL NOT NULL,
       description TEXT,
       notes TEXT,
+      link TEXT,
+      quantity REAL,
+      unit_price REAL,
       category_id INTEGER REFERENCES categories(id),
       vendor_id INTEGER REFERENCES vendors(id),
       employee_id INTEGER REFERENCES users(id),
@@ -94,6 +98,7 @@ function createSchema() {
       submitted_by_id INTEGER REFERENCES users(id),
       approved_by_id INTEGER REFERENCES users(id),
       approved_at TEXT,
+      ordered_at TEXT,
       rejection_reason TEXT,
       receipt_path TEXT,
       extracted_raw_text TEXT,
@@ -154,17 +159,22 @@ function createSchema() {
       notes TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_event_outcomes_event ON event_outcomes(event_id);
+
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY,
+      value TEXT
+    );
   `);
 }
 
 // Ported from models.py's seed_categories(): insert any established category
 // that doesn't already exist by name. Safe to call on every boot.
 function seedCategories() {
-  const insert = db.prepare('INSERT INTO categories (name, kind) VALUES (?, ?)');
+  const insert = db.prepare('INSERT INTO categories (name, kind, recurrence_basis) VALUES (?, ?, ?)');
   const exists = db.prepare('SELECT 1 FROM categories WHERE name = ?');
   const seedAll = db.transaction((rows) => {
-    for (const [name, kind] of rows) {
-      if (!exists.get(name)) insert.run(name, kind);
+    for (const [name, kind, recurrenceBasis] of rows) {
+      if (!exists.get(name)) insert.run(name, kind, recurrenceBasis);
     }
   });
   seedAll(ESTABLISHED_CATEGORIES);
@@ -198,17 +208,47 @@ function bootstrapAdmin() {
   }
 }
 
+// Small key/value settings store (headcount, the supply-request form's
+// editable intro text, etc.) -- simple enough not to need a dedicated table
+// per setting.
+function getSetting(key, fallback = null) {
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
+  return row ? row.value : fallback;
+}
+
+function setSetting(key, value) {
+  db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(
+    key,
+    value
+  );
+}
+
 createSchema();
 
-// Defensive migration for a column added after the uploads table may already
-// exist on a deployed disk (CREATE TABLE IF NOT EXISTS won't add it).
-try {
-  db.exec('ALTER TABLE uploads ADD COLUMN stored_filename TEXT');
-} catch (err) {
-  if (!/duplicate column/i.test(err.message)) throw err;
+// Defensive migrations for columns added after these tables may already
+// exist on a deployed disk (CREATE TABLE IF NOT EXISTS won't add them).
+function addColumnIfMissing(table, columnDef) {
+  try {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${columnDef}`);
+  } catch (err) {
+    if (!/duplicate column/i.test(err.message)) throw err;
+  }
 }
+
+addColumnIfMissing('uploads', 'stored_filename TEXT');
+addColumnIfMissing('transactions', 'link TEXT');
+addColumnIfMissing('transactions', 'quantity REAL');
+addColumnIfMissing('transactions', 'unit_price REAL');
+addColumnIfMissing('transactions', 'ordered_at TEXT');
+addColumnIfMissing('categories', "recurrence_basis TEXT NOT NULL DEFAULT 'recurring-monthly'");
 
 seedCategories();
 bootstrapAdmin();
+
+// Attached directly to the exported db instance (rather than changing the
+// module's export shape) since every route does `const db = require('../db')`
+// and calls `db.prepare(...)` on it directly.
+db.getSetting = getSetting;
+db.setSetting = setSetting;
 
 module.exports = db;
