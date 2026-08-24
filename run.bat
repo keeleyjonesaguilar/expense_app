@@ -13,7 +13,9 @@ if not exist ".env" (
     echo Creating .env from .env.example...
     copy .env.example .env >nul
     for /f "delims=" %%k in ('node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"') do set SECRET=%%k
-    powershell -Command "(Get-Content .env) -replace 'SECRET_KEY=change-me-to-a-random-value', 'SECRET_KEY=%SECRET%' -replace 'ADMIN_PASSWORD=change-me', 'ADMIN_PASSWORD=localdev123' | Set-Content .env"
+    REM Match the login page's own hint text ("admin@example.com / admin123")
+    REM so a fresh local setup logs in with exactly what's shown on screen.
+    powershell -Command "(Get-Content .env) -replace 'SECRET_KEY=change-me-to-a-random-value', 'SECRET_KEY=%SECRET%' -replace 'ADMIN_PASSWORD=change-me', 'ADMIN_PASSWORD=admin123' | Set-Content .env"
 )
 
 echo.
