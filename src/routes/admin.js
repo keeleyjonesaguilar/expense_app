@@ -204,6 +204,8 @@ router.post('/admin/transactions/:txId/update', (req, res) => {
   const vendorName = (req.body.vendor_name || '').trim();
   const isOneTime = req.body.is_one_time !== undefined ? 1 : 0;
   const notes = req.body.notes !== undefined ? req.body.notes : tx.notes;
+  const description = req.body.description !== undefined ? req.body.description.trim() : tx.description;
+  const amount = req.body.amount !== undefined && req.body.amount !== '' ? parseFloat(req.body.amount) : tx.amount;
 
   let vendorId = tx.vendor_id;
   if (vendorName) {
@@ -212,8 +214,11 @@ router.post('/admin/transactions/:txId/update', (req, res) => {
   }
 
   db.prepare(
-    'UPDATE transactions SET category_id = COALESCE(?, category_id), vendor_id = ?, is_one_time = ?, notes = ? WHERE id = ?'
-  ).run(catId, vendorId, isOneTime, notes, tx.id);
+    `UPDATE transactions
+     SET category_id = COALESCE(?, category_id), vendor_id = ?, is_one_time = ?, notes = ?,
+         description = ?, amount = ?
+     WHERE id = ?`
+  ).run(catId, vendorId, isOneTime, notes, description, Number.isFinite(amount) ? amount : tx.amount, tx.id);
 
   flash(req, 'success', 'Transaction updated.');
   res.redirect('/admin/transactions');

@@ -11,9 +11,14 @@
         <div><strong><%= fmtDate(t.date) %></strong></div>
         <div>$<%= fmt2(t.amount) %></div>
         <div class="text-muted"><%= t.category ? t.category.name : 'Uncategorized' %></div>
+        <% if (t.source === 'supply_request') { %><span class="badge bg-info text-dark">Supply Request</span><% } %>
         <% if (t.is_one_time) { %><span class="badge badge-onetime">One-Time</span><% } %>
       </div>
-      <div>Submitted by <strong><%= t.submitted_by ? t.submitted_by.name : '' %></strong> — <%= t.description %></div>
+      <% if (t.source === 'supply_request') { %>
+        <div><%= t.description %></div>
+      <% } else { %>
+        <div>Submitted by <strong><%= t.submitted_by ? t.submitted_by.name : '' %></strong> — <%= t.description %></div>
+      <% } %>
       <% if (t.vendor) { %><div class="text-muted small">Vendor: <%= t.vendor.name %></div><% } %>
       <% if (t.notes) { %><div class="small mt-1"><em>Notes: <%= t.notes %></em></div><% } %>
       <% if (t.receipt_path) { %><div class="mt-2"><a href="/data/receipts/<%= t.receipt_path.split('/').slice(1).join('/') %>" target="_blank">View receipt</a></div><% } %>

@@ -73,6 +73,7 @@ app.get('/', (req, res) => {
 });
 
 app.use(require('./src/routes/auth'));
+app.use(require('./src/routes/supplyRequest'));
 app.use(require('./src/routes/expenses'));
 app.use(require('./src/routes/admin'));
 app.use(require('./src/routes/bulkImport'));

@@ -35,6 +35,8 @@ const ESTABLISHED_CATEGORIES = [
   ['Catering', 'semi-variable'],
   ['Personal Development', 'variable'],
   ['Food & Meals', 'semi-variable'],
+  ['Lunch & Learn', 'semi-variable'],
+  ['Holiday Party', 'discretionary'],
   ['Miscellaneous', 'semi-variable'],
 ];
 
@@ -45,6 +47,7 @@ const STATUS_REJECTED = 'rejected';
 const SOURCE_MANUAL = 'manual';
 const SOURCE_EXPENSE_REPORT = 'expense_report';
 const SOURCE_BULK_IMPORT = 'bulk_import';
+const SOURCE_SUPPLY_REQUEST = 'supply_request';
 
 module.exports = {
   ESTABLISHED_CATEGORIES,
@@ -54,4 +57,5 @@ module.exports = {
   SOURCE_MANUAL,
   SOURCE_EXPENSE_REPORT,
   SOURCE_BULK_IMPORT,
+  SOURCE_SUPPLY_REQUEST,
 };

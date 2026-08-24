@@ -1,0 +1,45 @@
+<%- include('partials/head', { title: 'Request Supplies' }) %>
+<h3 class="mb-3">Request Supplies</h3>
+<p class="text-muted">No login needed — fill this out and it goes straight to the approvals queue.</p>
+
+<% if (submitted) { %>
+<div class="alert alert-success">Thanks — your request has been submitted for approval.</div>
+<% } %>
+
+<div class="card p-4" style="max-width: 640px;">
+  <form method="post">
+    <div class="row">
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Your Name *</label>
+        <input type="text" name="requester_name" class="form-control" required>
+      </div>
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Department</label>
+        <input type="text" name="department" class="form-control">
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">What do you need? *</label>
+      <input type="text" name="item" class="form-control" placeholder="e.g. box of blue pens, replacement keyboard" required>
+    </div>
+    <div class="row">
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Category *</label>
+        <select name="category_id" class="form-select" required>
+          <option value="">Choose...</option>
+          <% categories.forEach(function (c) { %><option value="<%= c.id %>"><%= c.name %></option><% }) %>
+        </select>
+      </div>
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Quantity</label>
+        <input type="text" name="quantity" class="form-control">
+      </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Anything else we should know?</label>
+      <textarea name="justification" class="form-control" rows="2" placeholder="e.g. why you need it, preferred brand, how soon"></textarea>
+    </div>
+    <button type="submit" class="btn btn-primary">Submit Request</button>
+  </form>
+</div>
+<%- include('partials/foot') %>
