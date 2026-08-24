@@ -1,0 +1,72 @@
+<%- include('partials/head', { title: 'Transactions' }) %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3>All Transactions</h3>
+  <a href="/admin/transactions/new" class="btn btn-primary btn-sm">+ Add Manual Entry</a>
+</div>
+
+<form method="get" class="row g-2 mb-3">
+  <div class="col-auto">
+    <select name="category_id" class="form-select form-select-sm">
+      <option value="">All categories</option>
+      <% categories.forEach(function (c) { %><option value="<%= c.id %>" <%= String(filters.category_id) === String(c.id) ? 'selected' : '' %>><%= c.name %></option><% }) %>
+    </select>
+  </div>
+  <div class="col-auto">
+    <select name="employee_id" class="form-select form-select-sm">
+      <option value="">All employees</option>
+      <% employees.forEach(function (e) { %><option value="<%= e.id %>" <%= String(filters.employee_id) === String(e.id) ? 'selected' : '' %>><%= e.name %></option><% }) %>
+    </select>
+  </div>
+  <div class="col-auto">
+    <select name="one_time" class="form-select form-select-sm">
+      <option value="">One-time: any</option>
+      <option value="1" <%= filters.one_time === '1' ? 'selected' : '' %>>One-time only</option>
+      <option value="0" <%= filters.one_time === '0' ? 'selected' : '' %>>Recurring only</option>
+    </select>
+  </div>
+  <div class="col-auto">
+    <select name="status" class="form-select form-select-sm">
+      <option value="">Status: any</option>
+      <option value="approved" <%= filters.status === 'approved' ? 'selected' : '' %>>Approved</option>
+      <option value="pending" <%= filters.status === 'pending' ? 'selected' : '' %>>Pending</option>
+      <option value="rejected" <%= filters.status === 'rejected' ? 'selected' : '' %>>Rejected</option>
+    </select>
+  </div>
+  <div class="col-auto"><button class="btn btn-outline-secondary btn-sm">Filter</button></div>
+</form>
+
+<div class="card">
+<table class="table table-sm mb-0">
+  <thead class="table-light">
+    <tr><th>Date</th><th>Category</th><th>Vendor</th><th>Employee</th><th>Description</th><th class="text-end">Amount</th><th>One-Time</th><th>Status</th><th>Notes</th></tr>
+  </thead>
+  <tbody>
+    <% if (txs.length === 0) { %>
+    <tr><td colspan="9" class="text-center text-muted py-4">No transactions match those filters.</td></tr>
+    <% } %>
+    <% txs.forEach(function (t) { %>
+    <tr>
+      <form method="post" action="/admin/transactions/<%= t.id %>/update" id="f<%= t.id %>"></form>
+      <td><%= fmtDate(t.date) %></td>
+      <td>
+        <select name="category_id" form="f<%= t.id %>" class="form-select form-select-sm" style="width:160px" onchange="this.form.submit()">
+            <% categories.forEach(function (c) { %><option value="<%= c.id %>" <%= t.category_id === c.id ? 'selected' : '' %>><%= c.name %></option><% }) %>
+        </select>
+      </td>
+      <td><input type="text" name="vendor_name" form="f<%= t.id %>" value="<%= t.vendor ? t.vendor.name : '' %>" class="form-control form-control-sm" style="width:130px"></td>
+      <td><%= t.employee ? t.employee.name : (t.submitted_by ? t.submitted_by.name : '-') %></td>
+      <td><%= t.description %></td>
+      <td class="text-end">$<%= fmt2(t.amount) %></td>
+      <td><input type="checkbox" name="is_one_time" form="f<%= t.id %>" <%= t.is_one_time ? 'checked' : '' %> onchange="this.form.submit()"></td>
+      <td>
+        <% if (t.status === 'pending') { %><span class="badge badge-pending">Pending</span>
+        <% } else if (t.status === 'approved') { %><span class="badge badge-approved">Approved</span>
+        <% } else { %><span class="badge badge-rejected">Rejected</span><% } %>
+      </td>
+      <td><input type="text" name="notes" form="f<%= t.id %>" value="<%= t.notes || '' %>" class="form-control form-control-sm" style="width:160px" onblur="this.form.submit()"></td>
+    </tr>
+    <% }) %>
+  </tbody>
+</table>
+</div>
+<%- include('partials/foot') %>

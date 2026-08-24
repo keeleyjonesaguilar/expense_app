@@ -1,0 +1,81 @@
+<%- include('partials/head', { title: ev.name }) %>
+<h3><%= ev.name %></h3>
+<p class="text-muted"><%= ev.event_type.charAt(0).toUpperCase() + ev.event_type.slice(1) %> — <%= fmtDate(ev.date) %> <% if (ev.location) { %>— <%= ev.location %><% } %></p>
+<% if (ev.notes) { %><p><%= ev.notes %></p><% } %>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3"><div class="stat-tile"><div class="label">Cost</div><div class="value">$<%= fmtMoney(ev.cost || 0) %></div></div></div>
+  <div class="col-md-3"><div class="stat-tile"><div class="label">Connections Made</div><div class="value"><%= ev.connections.length %></div></div></div>
+  <div class="col-md-3"><div class="stat-tile"><div class="label">Outcome Value</div><div class="value">$<%= fmtMoney(ev.total_outcome_value) %></div></div></div>
+  <div class="col-md-3"><div class="stat-tile"><div class="label">Net ROI</div><div class="value <%= ev.roi_dollar >= 0 ? 'text-success' : 'text-danger' %>">$<%= fmtMoney(ev.roi_dollar) %></div></div></div>
+</div>
+
+<div class="row g-3">
+  <div class="col-md-6">
+    <div class="card p-3">
+      <div class="d-flex justify-content-between"><h6>Connections</h6></div>
+      <table class="table table-sm">
+        <thead><tr><th>Name</th><th>Company</th><th>Status</th></tr></thead>
+        <tbody>
+        <% if (ev.connections.length === 0) { %>
+          <tr><td colspan="3" class="text-muted text-center">No connections logged yet.</td></tr>
+        <% } %>
+        <% ev.connections.forEach(function (c) { %>
+          <tr><td><%= c.contact_name %></td><td><%= c.company %></td><td><span class="badge bg-secondary"><%= c.follow_up_status %></span></td></tr>
+        <% }) %>
+        </tbody>
+      </table>
+      <button class="btn btn-outline-primary btn-sm" data-bs-toggle="collapse" data-bs-target="#conn-form">+ Add Connection</button>
+      <div class="collapse mt-2" id="conn-form">
+        <form method="post" action="/marketing/<%= ev.id %>/connections/new">
+          <div class="mb-2"><input type="text" name="contact_name" class="form-control form-control-sm" placeholder="Contact name" required></div>
+          <div class="mb-2"><input type="text" name="company" class="form-control form-control-sm" placeholder="Company"></div>
+          <div class="mb-2"><input type="text" name="title" class="form-control form-control-sm" placeholder="Title"></div>
+          <div class="mb-2"><input type="email" name="email" class="form-control form-control-sm" placeholder="Email"></div>
+          <div class="mb-2">
+            <select name="follow_up_status" class="form-select form-select-sm">
+              <option value="new">New</option><option value="contacted">Contacted</option>
+              <option value="meeting-scheduled">Meeting Scheduled</option><option value="closed">Closed / Won</option><option value="dead">Dead</option>
+            </select>
+          </div>
+          <div class="mb-2"><textarea name="notes" class="form-control form-control-sm" placeholder="Notes" rows="2"></textarea></div>
+          <button class="btn btn-primary btn-sm w-100">Save Connection</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card p-3">
+      <h6>Outcomes</h6>
+      <table class="table table-sm">
+        <thead><tr><th>Description</th><th>Type</th><th class="text-end">Value</th></tr></thead>
+        <tbody>
+        <% if (ev.outcomes.length === 0) { %>
+          <tr><td colspan="3" class="text-muted text-center">No outcomes logged yet.</td></tr>
+        <% } %>
+        <% ev.outcomes.forEach(function (o) { %>
+          <tr><td><%= o.description %></td><td><span class="badge bg-secondary"><%= o.outcome_type %></span></td><td class="text-end">$<%= fmtMoney(o.estimated_value) %></td></tr>
+        <% }) %>
+        </tbody>
+      </table>
+      <button class="btn btn-outline-primary btn-sm" data-bs-toggle="collapse" data-bs-target="#outcome-form">+ Log Outcome</button>
+      <div class="collapse mt-2" id="outcome-form">
+        <form method="post" action="/marketing/<%= ev.id %>/outcomes/new">
+          <div class="mb-2"><input type="text" name="description" class="form-control form-control-sm" placeholder="e.g. Signed contract with ABC Corp" required></div>
+          <div class="mb-2">
+            <select name="outcome_type" class="form-select form-select-sm">
+              <option value="deal">Closed Deal</option><option value="lead">Qualified Lead</option>
+              <option value="partnership">Partnership</option><option value="referral">Referral</option><option value="other">Other</option>
+            </select>
+          </div>
+          <div class="mb-2"><input type="number" step="0.01" name="estimated_value" class="form-control form-control-sm" placeholder="Estimated $ value"></div>
+          <div class="mb-2"><input type="date" name="date_logged" class="form-control form-control-sm"></div>
+          <div class="mb-2"><textarea name="notes" class="form-control form-control-sm" placeholder="Notes" rows="2"></textarea></div>
+          <button class="btn btn-primary btn-sm w-100">Save Outcome</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+<%- include('partials/foot') %>

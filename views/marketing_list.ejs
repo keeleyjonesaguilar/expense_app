@@ -1,0 +1,40 @@
+<%- include('partials/head', { title: 'Marketing & ROI' }) %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3>Marketing &amp; Networking ROI</h3>
+  <a href="/marketing/new" class="btn btn-primary">+ Log New Event</a>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-4"><div class="stat-tile"><div class="label">Total Spent on Events</div><div class="value">$<%= fmtMoney(total_cost) %></div></div></div>
+  <div class="col-md-4"><div class="stat-tile"><div class="label">Total Logged Outcome Value</div><div class="value">$<%= fmtMoney(total_value) %></div></div></div>
+  <div class="col-md-4"><div class="stat-tile"><div class="label">Net ROI</div><div class="value">$<%= fmtMoney(total_value - total_cost) %></div></div></div>
+</div>
+
+<div class="card">
+<table class="table table-sm mb-0">
+  <thead class="table-light">
+    <tr><th>Event</th><th>Type</th><th>Date</th><th class="text-end">Cost</th><th class="text-end">Connections</th>
+        <th class="text-end">Outcome Value</th><th class="text-end">Net ROI</th><th class="text-end">ROI Ratio</th></tr>
+  </thead>
+  <tbody>
+    <% if (events.length === 0) { %>
+    <tr><td colspan="8" class="text-center text-muted py-4">No events logged yet.</td></tr>
+    <% } %>
+    <% events.forEach(function (e) { %>
+    <tr>
+      <td><a href="/marketing/<%= e.id %>"><%= e.name %></a></td>
+      <td><span class="badge bg-secondary"><%= e.event_type %></span></td>
+      <td><%= fmtDate(e.date) %></td>
+      <td class="text-end">$<%= fmtMoney(e.cost || 0) %></td>
+      <td class="text-end"><%= e.connections_count %></td>
+      <td class="text-end">$<%= fmtMoney(e.total_outcome_value) %></td>
+      <td class="text-end <%= e.roi_dollar >= 0 ? 'text-success' : 'text-danger' %> fw-bold">
+        $<%= fmtMoney(e.roi_dollar) %>
+      </td>
+      <td class="text-end"><%= e.roi_ratio !== null ? e.roi_ratio.toFixed(1) + 'x' : '-' %></td>
+    </tr>
+    <% }) %>
+  </tbody>
+</table>
+</div>
+<%- include('partials/foot') %>

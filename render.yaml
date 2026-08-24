@@ -1,0 +1,31 @@
+# Render "Blueprint" spec. Push this repo to GitHub, then in the Render
+# dashboard choose "New +" -> "Blueprint" and point it at the repo -- Render
+# reads this file and provisions the service automatically.
+#
+# This uses SQLite on a small persistent disk, which needs a paid instance
+# (the free plan has no disk).
+
+services:
+  - type: web
+    name: spend-tracker
+    runtime: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ADMIN_EMAIL
+        value: admin@example.com
+      - key: ADMIN_PASSWORD
+        generateValue: true
+      - key: DATA_DIR
+        value: /var/data
+      - key: DATABASE_URL
+        value: sqlite:////var/data/app.db
+      - key: NODE_VERSION
+        value: 20.16.0
+    disk:
+      name: spend-tracker-data
+      mountPath: /var/data
+      sizeGB: 1

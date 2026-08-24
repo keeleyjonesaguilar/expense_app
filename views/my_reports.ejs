@@ -1,0 +1,35 @@
+<%- include('partials/head', { title: 'My Reports' }) %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3>My Expense Reports</h3>
+  <a href="/submit" class="btn btn-primary">+ Submit New</a>
+</div>
+<div class="card">
+  <table class="table table-sm mb-0">
+    <thead class="table-light">
+      <tr><th>Date</th><th>Category</th><th>Vendor</th><th>Description</th><th class="text-end">Amount</th><th>One-Time</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+      <% if (txs.length === 0) { %>
+      <tr><td colspan="7" class="text-center text-muted py-4">No expense reports yet.</td></tr>
+      <% } %>
+      <% txs.forEach(function (t) { %>
+      <tr>
+        <td><%= fmtDate(t.date) %></td>
+        <td><%= t.category ? t.category.name : '-' %></td>
+        <td><%= t.vendor ? t.vendor.name : '-' %></td>
+        <td><%= t.description %>
+          <% if (t.rejection_reason) { %><div class="text-danger small">Reason: <%= t.rejection_reason %></div><% } %>
+        </td>
+        <td class="text-end">$<%= fmt2(t.amount) %></td>
+        <td><% if (t.is_one_time) { %><span class="badge badge-onetime">One-Time</span><% } %></td>
+        <td>
+          <% if (t.status === 'pending') { %><span class="badge badge-pending">Pending</span>
+          <% } else if (t.status === 'approved') { %><span class="badge badge-approved">Approved</span>
+          <% } else { %><span class="badge badge-rejected">Rejected</span><% } %>
+        </td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+<%- include('partials/foot') %>

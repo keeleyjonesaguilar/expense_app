@@ -1,0 +1,22 @@
+# Node
+node_modules/
+npm-debug.log*
+
+# Database (local dev data -- never commit real spend/employee data)
+instance/*.db
+instance/*.sqlite3
+
+# Uploaded files (receipts and bulk-import files -- may contain sensitive data)
+receipts/*
+!receipts/.gitkeep
+uploads/*
+!uploads/.gitkeep
+
+# Environment / secrets
+.env
+*.env.local
+
+# OS / editor cruft
+.DS_Store
+.vscode/
+.idea/

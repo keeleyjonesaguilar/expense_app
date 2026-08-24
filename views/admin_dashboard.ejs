@@ -1,0 +1,103 @@
+<%
+const extraScripts = `
+<script src="/static/vendor/chart.umd.min.js"></script>
+<script>
+const PALETTE = ['#2a78d6','#eb6834','#1baf7a','#eda100','#e87ba4','#008300','#4a3aa7','#e34948'];
+
+new Chart(document.getElementById('catChart'), {
+  type: 'bar',
+  data: {
+    labels: ${JSON.stringify(top_categories.map((c) => c[0]))},
+    datasets: [{
+      data: ${JSON.stringify(top_categories.map((c) => c[1]))},
+      backgroundColor: PALETTE[0],
+      borderRadius: 4,
+    }]
+  },
+  options: {
+    indexAxis: 'y',
+    plugins: { legend: { display: false } },
+    scales: { x: { ticks: { callback: v => '$' + v.toLocaleString() } } }
+  }
+});
+
+new Chart(document.getElementById('empChart'), {
+  type: 'doughnut',
+  data: {
+    labels: ${JSON.stringify(by_employee.map((e) => e[0]))},
+    datasets: [{
+      data: ${JSON.stringify(by_employee.map((e) => e[1]))},
+      backgroundColor: PALETTE,
+    }]
+  },
+  options: { plugins: { legend: { position: 'right' } } }
+});
+
+new Chart(document.getElementById('monthChart'), {
+  type: 'line',
+  data: {
+    labels: ${JSON.stringify(months_sorted.map((m) => m[0]))},
+    datasets: [{
+      label: 'Monthly Spend',
+      data: ${JSON.stringify(months_sorted.map((m) => m[1]))},
+      borderColor: PALETTE[0], backgroundColor: PALETTE[0] + '33',
+      fill: true, tension: 0.25, pointRadius: 3,
+    }]
+  },
+  options: {
+    plugins: { legend: { display: false } },
+    scales: { y: { ticks: { callback: v => '$' + v.toLocaleString() } } }
+  }
+});
+</script>
+`;
+%>
+<%- include('partials/head', { title: 'Dashboard' }) %>
+<h3 class="mb-3">Admin Dashboard</h3>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3"><div class="stat-tile"><div class="label">Total Approved Spend</div><div class="value">$<%= fmtMoney(total_spend) %></div></div></div>
+  <div class="col-md-3"><div class="stat-tile"><div class="label">Recurring Spend</div><div class="value">$<%= fmtMoney(recurring_total) %></div></div></div>
+  <div class="col-md-3"><div class="stat-tile"><div class="label">One-Time Spend</div><div class="value">$<%= fmtMoney(onetime_total) %></div></div></div>
+  <div class="col-md-3"><div class="stat-tile"><div class="label">Pending Approvals</div><div class="value"><%= pending_count %></div>
+    <% if (pending_count) { %><a href="/admin/approvals" class="small">Review now &rarr;</a><% } %>
+  </div></div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-6">
+    <div class="card p-3">
+      <h6>Top Categories</h6>
+      <canvas id="catChart" height="220"></canvas>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card p-3">
+      <h6>Spending by Employee</h6>
+      <canvas id="empChart" height="220"></canvas>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-12">
+    <div class="card p-3">
+      <h6>Monthly Trend</h6>
+      <canvas id="monthChart" height="100"></canvas>
+    </div>
+  </div>
+</div>
+
+<div class="card p-3">
+  <h6>Top Vendors</h6>
+  <table class="table table-sm">
+    <thead><tr><th>Vendor</th><th class="text-end">Total Spend</th></tr></thead>
+    <tbody>
+      <% top_vendors.forEach(function (pair) { %>
+      <tr><td><%= pair[0] %></td><td class="text-end">$<%= fmtMoney(pair[1]) %></td></tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+
+<%- include('partials/foot', { extraScripts }) %>

@@ -1,0 +1,52 @@
+<%- include('partials/head', { title: 'Bulk Import' }) %>
+<h3 class="mb-3">Bulk Import — Spreadsheets, PDFs &amp; Images</h3>
+<div class="card p-4 mb-4">
+  <p class="text-muted">Upload an Amazon/Staples-style spreadsheet export (CSV/XLSX), or a PDF/image statement or receipt.
+  Every row gets a suggested category you can correct before anything is saved.</p>
+  <form method="post" action="/admin/import" enctype="multipart/form-data" class="row g-2">
+    <div class="col-md-8"><input type="file" name="file" class="form-control" accept=".csv,.xlsx,.xls,.pdf,.png,.jpg,.jpeg" required></div>
+    <div class="col-md-4"><button class="btn btn-primary w-100">Upload &amp; Extract</button></div>
+  </form>
+</div>
+
+<% if (preview_rows) { %>
+<form method="post" action="/admin/import/<%= upload_id %>/commit">
+  <div class="card p-3">
+    <h6>Review before importing (<%= preview_rows.length %> rows)</h6>
+    <table class="table table-sm">
+      <thead><tr><th>Skip</th><th>Date</th><th>Amount</th><th>Category</th><th>Vendor</th><th>Description</th><th>One-Time</th></tr></thead>
+      <tbody>
+      <% preview_rows.forEach(function (row, i) { %>
+        <tr>
+          <td><input type="checkbox" name="skip_<%= i %>"></td>
+          <td><input type="date" name="date_<%= i %>" value="<%= row.date || '' %>" class="form-control form-control-sm"></td>
+          <td><input type="number" step="0.01" name="amount_<%= i %>" value="<%= row.amount != null ? row.amount : '' %>" class="form-control form-control-sm" style="width:100px"></td>
+          <td>
+            <select name="category_<%= i %>" class="form-select form-select-sm">
+              <% categories.forEach(function (c) { %><option value="<%= c.name %>" <%= row.suggested_category === c.name ? 'selected' : '' %>><%= c.name %></option><% }) %>
+            </select>
+          </td>
+          <td><input type="text" name="vendor_<%= i %>" value="<%= row.vendor || '' %>" class="form-control form-control-sm" style="width:120px"></td>
+          <td><input type="text" name="description_<%= i %>" value="<%= row.description || '' %>" class="form-control form-control-sm" style="width:200px"></td>
+          <td><input type="checkbox" name="one_time_<%= i %>"></td>
+        </tr>
+      <% }) %>
+      </tbody>
+    </table>
+    <button class="btn btn-success">Commit Selected Rows</button>
+  </div>
+</form>
+<% } %>
+
+<div class="card p-3 mt-4">
+  <h6>Recent Uploads</h6>
+  <table class="table table-sm">
+    <thead><tr><th>File</th><th>Type</th><th>Uploaded</th><th>Rows Found</th><th>Rows Imported</th></tr></thead>
+    <tbody>
+    <% recent_uploads.forEach(function (u) { %>
+      <tr><td><%= u.filename %></td><td><%= u.file_type %></td><td><%= fmtDateTime(u.uploaded_at) %></td><td><%= u.row_count %></td><td><%= u.imported_count %></td></tr>
+    <% }) %>
+    </tbody>
+  </table>
+</div>
+<%- include('partials/foot') %>

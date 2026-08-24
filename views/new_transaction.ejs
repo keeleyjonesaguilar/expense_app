@@ -1,0 +1,34 @@
+<%- include('partials/head', { title: 'Add Transaction' }) %>
+<h3 class="mb-3">Add Manual Transaction</h3>
+<div class="card p-4" style="max-width:700px;">
+  <form method="post">
+    <div class="row">
+      <div class="col-md-6 mb-3"><label class="form-label">Date *</label><input type="date" name="date" class="form-control" required></div>
+      <div class="col-md-6 mb-3"><label class="form-label">Amount ($) *</label><input type="number" step="0.01" name="amount" class="form-control" required></div>
+    </div>
+    <div class="row">
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Category *</label>
+        <select name="category_id" class="form-select" required>
+          <% categories.forEach(function (c) { %><option value="<%= c.id %>"><%= c.name %></option><% }) %>
+        </select>
+      </div>
+      <div class="col-md-6 mb-3">
+        <label class="form-label">Employee (who incurred it)</label>
+        <select name="employee_id" class="form-select">
+          <option value="">-- none / company-wide --</option>
+          <% employees.forEach(function (e) { %><option value="<%= e.id %>"><%= e.name %></option><% }) %>
+        </select>
+      </div>
+    </div>
+    <div class="mb-3"><label class="form-label">Vendor</label><input type="text" name="vendor_name" class="form-control"></div>
+    <div class="mb-3"><label class="form-label">Description</label><input type="text" name="description" class="form-control"></div>
+    <div class="mb-3"><label class="form-label">Notes</label><textarea name="notes" class="form-control" rows="2"></textarea></div>
+    <div class="form-check mb-3">
+      <input type="checkbox" class="form-check-input" name="is_one_time" id="ot">
+      <label class="form-check-label" for="ot">One-time purchase</label>
+    </div>
+    <button class="btn btn-primary">Add Transaction</button>
+  </form>
+</div>
+<%- include('partials/foot') %>

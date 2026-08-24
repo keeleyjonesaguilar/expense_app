@@ -1,0 +1,42 @@
+<%- include('partials/head', { title: 'Forecast' }) %>
+<h3 class="mb-3">Next-Year Budget Forecast</h3>
+<div class="card p-3 mb-4">
+  <form method="get" class="row g-2 align-items-end">
+    <div class="col-auto">
+      <label class="form-label small mb-0">Staff/growth factor</label>
+      <input type="number" step="0.05" name="growth_factor" value="<%= growth_factor %>" class="form-control form-control-sm" style="width:120px">
+    </div>
+    <div class="col-auto"><button class="btn btn-outline-primary btn-sm">Recalculate</button></div>
+    <div class="col-auto text-muted small">
+      Recurring categories: recommended = max(prior year x growth factor, <%= current_year %> YTD annualized).
+      One-time/growth categories get a 10% maintenance provision instead of a repeat of this year's setup spend.
+    </div>
+  </form>
+</div>
+
+<div class="stat-tile mb-4" style="max-width:320px;">
+  <div class="label">Total Recommended Annual Budget</div>
+  <div class="value">$<%= fmtMoney(total_annual) %></div>
+</div>
+
+<div class="card">
+<table class="table table-sm mb-0">
+  <thead class="table-light">
+    <tr><th>Category</th><th class="text-end"><%= prior_year %> Actual</th><th class="text-end"><%= current_year %> YTD</th>
+        <th class="text-end">Rec. Monthly</th><th class="text-end">Rec. Annual</th><th>Basis</th></tr>
+  </thead>
+  <tbody>
+    <% rows.forEach(function (r) { %>
+    <tr>
+      <td><%= r.category %></td>
+      <td class="text-end">$<%= fmtMoney(r.prior_total) %></td>
+      <td class="text-end">$<%= fmtMoney(r.ytd_total) %></td>
+      <td class="text-end">$<%= fmtMoney(r.recommended_monthly) %></td>
+      <td class="text-end fw-bold">$<%= fmtMoney(r.recommended_annual) %></td>
+      <td class="small text-muted"><%= r.basis %></td>
+    </tr>
+    <% }) %>
+  </tbody>
+</table>
+</div>
+<%- include('partials/foot') %>
