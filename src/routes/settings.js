@@ -183,4 +183,19 @@ router.post('/admin/settings/vendors/:id/update', (req, res) => {
   res.redirect('/admin/settings/vendors');
 });
 
+// POST /admin/settings/reset-transactions -- deletes every row from
+// transactions (the full ledger: approved/pending/awaiting-order/rejected,
+// manual entries, expense reports, bulk imports, supply requests -- all of
+// it), but leaves categories/vendors/users/settings untouched. Requires
+// typing the literal word DELETE as a confirmation, since there's no undo.
+router.post('/admin/settings/reset-transactions', (req, res) => {
+  if ((req.body.confirm || '').trim() !== 'DELETE') {
+    flash(req, 'danger', 'Type DELETE exactly to confirm -- nothing was deleted.');
+    return res.redirect('/admin/settings');
+  }
+  const info = db.prepare('DELETE FROM transactions').run();
+  flash(req, 'success', `Deleted ${info.changes} transaction(s). Categories, vendors, and users were left alone.`);
+  res.redirect('/admin/settings');
+});
+
 module.exports = router;
