@@ -11,15 +11,28 @@ const { STATUS_PENDING, SOURCE_EXPENSE_REPORT } = require('../constants');
 
 const router = express.Router();
 
+// Which fields Settings -> Required Fields has toggled on, beyond Date
+// (always required, not toggleable). Defaults preserve the app's original
+// hard-required set (amount, category) until an admin changes it.
+function getRequiredFields() {
+  const raw = db.getSetting('required_fields', null);
+  if (!raw) return ['amount', 'category'];
+  try {
+    return JSON.parse(raw);
+  } catch (err) {
+    return ['amount', 'category'];
+  }
+}
+
 const listCategories = db.prepare('SELECT * FROM categories ORDER BY name');
 const listVendors = db.prepare('SELECT * FROM vendors ORDER BY name');
 const findVendorByName = db.prepare('SELECT * FROM vendors WHERE name = ?');
 const insertVendor = db.prepare('INSERT INTO vendors (name) VALUES (?)');
 const insertTransaction = db.prepare(`
   INSERT INTO transactions
-    (date, amount, description, notes, link, category_id, vendor_id, employee_id,
+    (date, amount, description, notes, link, quantity, category_id, vendor_id, employee_id,
      is_one_time, source, status, submitted_by_id, receipt_path)
-  VALUES (@date, @amount, @description, @notes, @link, @category_id, @vendor_id, @employee_id,
+  VALUES (@date, @amount, @description, @notes, @link, @quantity, @category_id, @vendor_id, @employee_id,
           @is_one_time, @source, @status, @submitted_by_id, @receipt_path)
 `);
 const myTransactions = db.prepare(`
@@ -48,11 +61,13 @@ router.get('/submit', requireAuth, (req, res) => {
     categories: listCategories.all(),
     vendors: listVendors.all(),
     extracted: null,
+    required_fields: getRequiredFields(),
   });
 });
 
 router.post('/submit', requireAuth, upload.single('receipt'), async (req, res) => {
   const categories = listCategories.all();
+  const requiredFields = getRequiredFields();
 
   if (req.body.extract_only !== undefined) {
     const file = req.file;
@@ -72,6 +87,7 @@ router.post('/submit', requireAuth, upload.single('receipt'), async (req, res) =
       categories,
       extracted,
       vendors: listVendors.all(),
+      required_fields: requiredFields,
     });
   }
 
@@ -82,6 +98,7 @@ router.post('/submit', requireAuth, upload.single('receipt'), async (req, res) =
   const description = (req.body.description || '').trim();
   const notes = (req.body.notes || '').trim();
   const link = (req.body.link || '').trim() || null;
+  const quantityStr = req.body.quantity;
   const isOneTime = Boolean(req.body.is_one_time);
   const receiptPath = req.body.receipt_path || null;
 
@@ -90,8 +107,17 @@ router.post('/submit', requireAuth, upload.single('receipt'), async (req, res) =
   if (!validDate) errors.push('A valid date is required.');
 
   const amount = parseFloat(amountStr);
+  const quantity = quantityStr !== undefined && quantityStr !== '' ? parseFloat(quantityStr) : null;
+
+  // Amount and category are always validated (their DB columns/downstream
+  // logic depend on them); the rest are only required when Settings ->
+  // Required Fields has them toggled on.
   if (!Number.isFinite(amount)) errors.push('A valid amount is required.');
   if (!categoryId) errors.push('Please choose a category.');
+  if (requiredFields.includes('vendor') && !vendorName) errors.push('Vendor is required.');
+  if (requiredFields.includes('quantity') && !Number.isFinite(quantity)) errors.push('Quantity is required.');
+  if (requiredFields.includes('notes') && !notes) errors.push('Notes are required.');
+  if (requiredFields.includes('receipt') && !receiptPath) errors.push('A scanned receipt is required.');
 
   if (errors.length) {
     for (const e of errors) flash(req, 'danger', e);
@@ -100,6 +126,7 @@ router.post('/submit', requireAuth, upload.single('receipt'), async (req, res) =
       categories,
       extracted: null,
       vendors: listVendors.all(),
+      required_fields: requiredFields,
     });
   }
 
@@ -111,6 +138,7 @@ router.post('/submit', requireAuth, upload.single('receipt'), async (req, res) =
     description,
     notes,
     link,
+    quantity: Number.isFinite(quantity) ? quantity : null,
     category_id: parseInt(categoryId, 10),
     vendor_id: vendor ? vendor.id : null,
     employee_id: req.currentUser.id,

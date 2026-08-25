@@ -38,6 +38,11 @@
           <% }) %>
         </select>
       </div>
+      <div class="col-md-4 mb-3">
+        <label class="form-label">Quantity<%= required_fields.includes('quantity') ? ' *' : ' (optional)' %></label>
+        <input type="number" step="any" name="quantity" class="form-control" <%= required_fields.includes('quantity') ? 'required' : '' %>
+               value="<%= extracted && extracted.quantity ? extracted.quantity : '' %>">
+      </div>
     </div>
     <div class="mb-3">
       <label class="form-label">Link (optional)</label>
@@ -45,8 +50,8 @@
     </div>
     <div class="row">
       <div class="col-md-6 mb-3">
-        <label class="form-label">Vendor / Merchant</label>
-        <input type="text" name="vendor_name" class="form-control" list="vendor-list"
+        <label class="form-label">Vendor / Merchant<%= required_fields.includes('vendor') ? ' *' : '' %></label>
+        <input type="text" name="vendor_name" class="form-control" list="vendor-list" <%= required_fields.includes('vendor') ? 'required' : '' %>
                value="<%= extracted && extracted.vendor ? extracted.vendor : '' %>">
         <datalist id="vendor-list">
           <% vendors.forEach(function (v) { %><option value="<%= v.name %>"><% }) %>
@@ -59,9 +64,12 @@
       </div>
     </div>
     <div class="mb-3">
-      <label class="form-label">Notes — what was this for?</label>
-      <textarea name="notes" class="form-control" rows="2" placeholder="e.g. client dinner with ABC Corp, team offsite supplies, etc."></textarea>
+      <label class="form-label">Notes — what was this for?<%= required_fields.includes('notes') ? ' *' : '' %></label>
+      <textarea name="notes" class="form-control" rows="2" placeholder="e.g. client dinner with ABC Corp, team offsite supplies, etc." <%= required_fields.includes('notes') ? 'required' : '' %>></textarea>
     </div>
+    <% if (required_fields.includes('receipt')) { %>
+      <p class="small text-muted">A scanned receipt is required — use Step 1 above to attach and scan one first.</p>
+    <% } %>
     <div class="form-check mb-3">
       <input type="checkbox" class="form-check-input" name="is_one_time" id="one_time" <%= extracted && extracted.suggest_one_time ? 'checked' : '' %>>
       <label class="form-check-label" for="one_time">This is a one-time purchase (not expected to recur)</label>
