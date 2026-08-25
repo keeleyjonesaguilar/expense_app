@@ -184,8 +184,37 @@ function seedCategories() {
 // role exists yet, create one from ADMIN_EMAIL/ADMIN_PASSWORD env vars (same
 // default fallback values), warning if the default password is in use.
 function bootstrapAdmin() {
-  const hasAdmin = db.prepare("SELECT 1 FROM users WHERE role = 'admin'").get();
-  if (hasAdmin) return;
+  const existingAdmin = db.prepare("SELECT * FROM users WHERE role = 'admin' ORDER BY id LIMIT 1").get();
+
+  if (existingAdmin) {
+    // Keep the first admin's credentials in sync with ADMIN_EMAIL/
+    // ADMIN_PASSWORD on every boot, but only when those env vars are
+    // actually set -- otherwise a stale value here could clobber a
+    // password changed some other way. This exists because a mismatch
+    // between "what's in the database" and "what the env vars say" (e.g.
+    // after changing ADMIN_PASSWORD in Render's dashboard without also
+    // resetting the existing user) is a real, recurring failure mode:
+    // the login page always reflects the env vars, so the two silently
+    // drifting apart is confusing to debug from the outside.
+    if (process.env.ADMIN_PASSWORD) {
+      const email = process.env.ADMIN_EMAIL || existingAdmin.email;
+      const passwordHash = bcrypt.hashSync(process.env.ADMIN_PASSWORD, 10);
+      try {
+        db.prepare('UPDATE users SET email = ?, password_hash = ? WHERE id = ?').run(
+          email,
+          passwordHash,
+          existingAdmin.id
+        );
+      } catch (err) {
+        // UNIQUE constraint -- ADMIN_EMAIL collides with a different
+        // existing user's email. Leave that user's email alone but still
+        // sync the password, rather than crashing the whole boot over it.
+        if (!/UNIQUE constraint failed/i.test(err.message)) throw err;
+        db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, existingAdmin.id);
+      }
+    }
+    return;
+  }
 
   const adminEmail = process.env.ADMIN_EMAIL || 'admin@example.com';
   const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
