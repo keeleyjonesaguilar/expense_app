@@ -47,23 +47,23 @@
         <form method="post" action="/admin/settings/categories/<%= c.id %>/update" class="row g-2 align-items-end py-2">
           <div class="col-md-4">
             <label class="form-label small mb-0">Name</label>
-            <input type="text" name="name" value="<%= c.name %>" class="form-control form-control-sm" onblur="if(this.value!==this.defaultValue)this.form.submit()">
+            <input type="text" name="name" value="<%= c.name %>" class="form-control form-control-sm">
           </div>
           <div class="col-md-3">
             <label class="form-label small mb-0">Kind</label>
-            <select name="kind" class="form-select form-select-sm" onchange="this.form.submit()">
+            <select name="kind" class="form-select form-select-sm">
               <% ['fixed','variable','semi-variable','one-time-growth','discretionary'].forEach(function (k) { %>
                 <option value="<%= k %>" <%= c.kind === k ? 'selected' : '' %>><%= k %></option>
               <% }) %>
             </select>
           </div>
-          <div class="col-md-4">
+          <div class="col-md-3">
             <label class="form-label small mb-0">Default Basis</label>
-            <select name="recurrence_basis" class="form-select form-select-sm" onchange="this.form.submit()">
+            <select name="recurrence_basis" class="form-select form-select-sm">
               <% recurrence_options.forEach(function (o) { %><option value="<%= o[0] %>" <%= c.recurrence_basis === o[0] ? 'selected' : '' %>><%= o[1] %></option><% }) %>
             </select>
           </div>
-          <div class="col-md-1 text-muted small">Autosaves</div>
+          <div class="col-md-2"><button type="submit" class="btn btn-primary btn-sm w-100">Save</button></div>
         </form>
       </td>
     </tr>
