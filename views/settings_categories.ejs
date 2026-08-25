@@ -37,21 +37,35 @@
   <tbody>
     <% categories.forEach(function (c) { %>
     <tr>
-      <form method="post" action="/admin/settings/categories/<%= c.id %>/update" id="cf<%= c.id %>"></form>
-      <td><input type="text" name="name" form="cf<%= c.id %>" value="<%= c.name %>" class="form-control form-control-sm" style="width:220px"></td>
-      <td>
-        <select name="kind" form="cf<%= c.id %>" class="form-select form-select-sm" style="width:170px">
-          <% ['fixed','variable','semi-variable','one-time-growth','discretionary'].forEach(function (k) { %>
-            <option value="<%= k %>" <%= c.kind === k ? 'selected' : '' %>><%= k %></option>
-          <% }) %>
-        </select>
+      <td><%= c.name %></td>
+      <td><%= c.kind %></td>
+      <td><%= (recurrence_options.find(function (o) { return o[0] === c.recurrence_basis; }) || [null, c.recurrence_basis])[1] %></td>
+      <td><button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#edit-cat-<%= c.id %>">Edit</button></td>
+    </tr>
+    <tr class="collapse" id="edit-cat-<%= c.id %>">
+      <td colspan="4">
+        <form method="post" action="/admin/settings/categories/<%= c.id %>/update" class="row g-2 align-items-end py-2">
+          <div class="col-md-4">
+            <label class="form-label small mb-0">Name</label>
+            <input type="text" name="name" value="<%= c.name %>" class="form-control form-control-sm" onblur="if(this.value!==this.defaultValue)this.form.submit()">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small mb-0">Kind</label>
+            <select name="kind" class="form-select form-select-sm" onchange="this.form.submit()">
+              <% ['fixed','variable','semi-variable','one-time-growth','discretionary'].forEach(function (k) { %>
+                <option value="<%= k %>" <%= c.kind === k ? 'selected' : '' %>><%= k %></option>
+              <% }) %>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small mb-0">Default Basis</label>
+            <select name="recurrence_basis" class="form-select form-select-sm" onchange="this.form.submit()">
+              <% recurrence_options.forEach(function (o) { %><option value="<%= o[0] %>" <%= c.recurrence_basis === o[0] ? 'selected' : '' %>><%= o[1] %></option><% }) %>
+            </select>
+          </div>
+          <div class="col-md-1 text-muted small">Autosaves</div>
+        </form>
       </td>
-      <td>
-        <select name="recurrence_basis" form="cf<%= c.id %>" class="form-select form-select-sm" style="width:190px">
-          <% recurrence_options.forEach(function (o) { %><option value="<%= o[0] %>" <%= c.recurrence_basis === o[0] ? 'selected' : '' %>><%= o[1] %></option><% }) %>
-        </select>
-      </td>
-      <td><button class="btn btn-outline-secondary btn-sm" form="cf<%= c.id %>">Save</button></td>
     </tr>
     <% }) %>
   </tbody>
