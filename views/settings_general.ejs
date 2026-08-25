@@ -1,11 +1,5 @@
 <%- include('partials/head', { title: 'Settings' }) %>
-<h3 class="mb-3">Settings</h3>
-<ul class="nav nav-tabs mb-4">
-  <li class="nav-item"><a class="nav-link active" href="/admin/settings">General</a></li>
-  <li class="nav-item"><a class="nav-link" href="/admin/settings/users">Users</a></li>
-  <li class="nav-item"><a class="nav-link" href="/admin/settings/categories">Categories</a></li>
-  <li class="nav-item"><a class="nav-link" href="/admin/settings/vendors">Vendors</a></li>
-</ul>
+<%- include('partials/settings_nav', { active: 'general' }) %>
 
 <div class="card p-4" style="max-width:700px;">
   <form method="post">
@@ -19,41 +13,19 @@
       <textarea name="request_form_intro" class="form-control" rows="2"><%= request_form_intro %></textarea>
       <div class="form-text">Shown at the top of the public <a href="/request-supplies" target="_blank">Request Supplies</a> form.</div>
     </div>
+    <div class="mb-3">
+      <label class="form-label">Dashboard default year</label>
+      <div class="form-check">
+        <input class="form-check-input" type="radio" name="dashboard_year_default" id="ddef-current" value="current-year" <%= dashboard_year_default === 'current-year' ? 'checked' : '' %>>
+        <label class="form-check-label" for="ddef-current">Current calendar year (if it has data)</label>
+      </div>
+      <div class="form-check">
+        <input class="form-check-input" type="radio" name="dashboard_year_default" id="ddef-recent" value="most-recent" <%= dashboard_year_default === 'most-recent' ? 'checked' : '' %>>
+        <label class="form-check-label" for="ddef-recent">Most recent year with data</label>
+      </div>
+      <div class="form-text">Used when the current year has no transactions yet, or as the always-default if "most recent" is chosen.</div>
+    </div>
     <button class="btn btn-primary">Save</button>
   </form>
 </div>
-
-<div class="card p-4 mt-4 border-danger" style="max-width:700px;">
-  <h6 class="text-danger">Danger Zone</h6>
-  <p class="small text-muted mb-3">
-    Permanently deletes every transaction (approved, pending, awaiting-order,
-    and rejected -- manual entries, expense reports, bulk imports, and
-    supply requests, all of it). Categories, vendors, and user accounts are
-    left alone. <strong>This cannot be undone.</strong>
-  </p>
-  <form method="post" action="/admin/settings/reset-transactions" class="row g-2 align-items-end" id="reset-form">
-    <div class="col-md-6">
-      <label class="form-label small mb-0">Type <code>DELETE</code> to confirm</label>
-      <input type="text" name="confirm" id="confirm-input" class="form-control" autocomplete="off">
-    </div>
-    <div class="col-md-6">
-      <button type="submit" class="btn btn-danger w-100" id="reset-btn" disabled>Delete All Transactions</button>
-    </div>
-  </form>
-</div>
-<%
-const extraScripts = `
-<script>
-(function () {
-  var input = document.getElementById('confirm-input');
-  var btn = document.getElementById('reset-btn');
-  var form = document.getElementById('reset-form');
-  input.addEventListener('input', function () { btn.disabled = input.value !== 'DELETE'; });
-  form.addEventListener('submit', function (e) {
-    if (!confirm('This permanently deletes every transaction. Are you sure?')) e.preventDefault();
-  });
-})();
-</script>
-`;
-%>
-<%- include('partials/foot', { extraScripts }) %>
+<%- include('partials/foot') %>

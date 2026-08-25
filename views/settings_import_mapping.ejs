@@ -1,0 +1,46 @@
+<%- include('partials/head', { title: 'Settings — Import Mapping' }) %>
+<%- include('partials/settings_nav', { active: 'import-mapping' }) %>
+
+<div class="card p-3 mb-4">
+  <h6>Add Alias</h6>
+  <p class="text-muted small mb-2">Teaches the bulk-import matcher a new source-column name (e.g. a new vendor's export format uses "Merchant Name" instead of "Vendor"). Takes effect on the next upload -- no code change needed.</p>
+  <form method="post" action="/admin/settings/import-mapping" class="row g-2 align-items-end">
+    <div class="col-md-4">
+      <label class="form-label small mb-0">Field</label>
+      <select name="field" class="form-select form-select-sm">
+        <% ['date','amount','vendor','category','quantity','unit_price','link','notes','employee','one_time','description','order_number'].forEach(function (f) { %>
+          <option value="<%= f %>"><%= f %></option>
+        <% }) %>
+      </select>
+    </div>
+    <div class="col-md-6">
+      <label class="form-label small mb-0">Alias (the exact source column header, lowercased automatically)</label>
+      <input type="text" name="alias" class="form-control form-control-sm" placeholder="e.g. merchant name" required>
+    </div>
+    <div class="col-md-2"><button class="btn btn-primary btn-sm w-100">Add</button></div>
+  </form>
+</div>
+
+<div class="card p-3">
+  <h6>Current Aliases</h6>
+  <% fields.forEach(function (field) { %>
+    <div class="mb-3">
+      <div class="fw-bold small text-uppercase text-muted"><%= field %></div>
+      <table class="table table-sm mb-0">
+        <tbody>
+          <% by_field[field].forEach(function (row) { %>
+          <tr>
+            <td><%= row.alias %></td>
+            <td class="text-end" style="width:80px;">
+              <form method="post" action="/admin/settings/import-mapping/<%= row.id %>/delete" onsubmit="return confirm('Remove this alias?')">
+                <button class="btn btn-outline-danger btn-sm">Delete</button>
+              </form>
+            </td>
+          </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% }) %>
+</div>
+<%- include('partials/foot') %>

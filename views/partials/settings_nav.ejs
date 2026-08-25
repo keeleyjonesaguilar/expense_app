@@ -1,0 +1,10 @@
+<h3 class="mb-3">Settings</h3>
+<ul class="nav nav-tabs mb-4">
+  <li class="nav-item"><a class="nav-link <%= active === 'general' ? 'active' : '' %>" href="/admin/settings">General</a></li>
+  <li class="nav-item"><a class="nav-link <%= active === 'users' ? 'active' : '' %>" href="/admin/settings/users">Users</a></li>
+  <li class="nav-item"><a class="nav-link <%= active === 'categories' ? 'active' : '' %>" href="/admin/settings/categories">Categories</a></li>
+  <li class="nav-item"><a class="nav-link <%= active === 'vendors' ? 'active' : '' %>" href="/admin/settings/vendors">Vendors</a></li>
+  <li class="nav-item"><a class="nav-link <%= active === 'required-fields' ? 'active' : '' %>" href="/admin/settings/required-fields">Required Fields</a></li>
+  <li class="nav-item"><a class="nav-link <%= active === 'import-mapping' ? 'active' : '' %>" href="/admin/settings/import-mapping">Import Mapping</a></li>
+  <li class="nav-item"><a class="nav-link text-danger <%= active === 'danger-zone' ? 'active' : '' %>" href="/admin/settings/danger-zone">Danger Zone</a></li>
+</ul>

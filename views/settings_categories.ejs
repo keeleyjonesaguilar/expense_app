@@ -1,17 +1,11 @@
 <%- include('partials/head', { title: 'Settings — Categories' }) %>
-<h3 class="mb-3">Settings</h3>
-<ul class="nav nav-tabs mb-4">
-  <li class="nav-item"><a class="nav-link" href="/admin/settings">General</a></li>
-  <li class="nav-item"><a class="nav-link" href="/admin/settings/users">Users</a></li>
-  <li class="nav-item"><a class="nav-link active" href="/admin/settings/categories">Categories</a></li>
-  <li class="nav-item"><a class="nav-link" href="/admin/settings/vendors">Vendors</a></li>
-</ul>
+<%- include('partials/settings_nav', { active: 'categories' }) %>
 
 <div class="card p-3 mb-4">
   <h6>Add Category</h6>
   <form method="post" action="/admin/settings/categories" class="row g-2 align-items-end">
-    <div class="col-md-4"><label class="form-label small mb-0">Name</label><input type="text" name="name" class="form-control form-control-sm" required></div>
-    <div class="col-md-3">
+    <div class="col-md-3"><label class="form-label small mb-0">Name</label><input type="text" name="name" class="form-control form-control-sm" required></div>
+    <div class="col-md-2">
       <label class="form-label small mb-0">Kind</label>
       <select name="kind" class="form-select form-select-sm">
         <option value="fixed">Fixed</option>
@@ -21,14 +15,19 @@
         <option value="discretionary">Discretionary</option>
       </select>
     </div>
-    <div class="col-md-3">
+    <div class="col-md-2">
       <label class="form-label small mb-0">Default Basis</label>
       <select name="recurrence_basis" class="form-select form-select-sm">
         <% recurrence_options.forEach(function (o) { %><option value="<%= o[0] %>" <%= o[0] === 'recurring-monthly' ? 'selected' : '' %>><%= o[1] %></option><% }) %>
       </select>
     </div>
+    <div class="col-md-3">
+      <label class="form-label small mb-0">Why is this being added? *</label>
+      <input type="text" name="added_reason" class="form-control form-control-sm" placeholder="e.g. requested by ops for X" required>
+    </div>
     <div class="col-md-2"><button class="btn btn-primary btn-sm w-100">Add</button></div>
   </form>
+  <p class="text-muted small mt-2 mb-0">A reason is required for new categories so the list only grows on purpose -- it's shown as a tooltip on the category name below.</p>
 </div>
 
 <div class="card">
@@ -37,7 +36,7 @@
   <tbody>
     <% categories.forEach(function (c) { %>
     <tr>
-      <td><%= c.name %></td>
+      <td><%= c.name %><% if (c.added_reason) { %> <span class="text-muted" style="cursor:help" title="<%= c.added_reason %>">&#9432;</span><% } %></td>
       <td><%= c.kind %></td>
       <td><%= (recurrence_options.find(function (o) { return o[0] === c.recurrence_basis; }) || [null, c.recurrence_basis])[1] %></td>
       <td><button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#edit-cat-<%= c.id %>">Edit</button></td>

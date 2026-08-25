@@ -1,0 +1,16 @@
+<%- include('partials/head', { title: 'Settings — Required Fields' }) %>
+<%- include('partials/settings_nav', { active: 'required-fields' }) %>
+
+<div class="card p-4" style="max-width:600px;">
+  <p class="text-muted small">Controls which fields are mandatory on the employee <a href="/submit" target="_blank">Submit Expense</a> form. Date is always required and isn't listed here. Amount and Category are effectively always required too (the app depends on them), but are included below so you can see that reflected.</p>
+  <form method="post">
+    <% requirable_fields.forEach(function (f) { %>
+      <div class="form-check mb-2">
+        <input class="form-check-input" type="checkbox" name="<%= f %>" id="req-<%= f %>" <%= required.includes(f) ? 'checked' : '' %>>
+        <label class="form-check-label text-capitalize" for="req-<%= f %>"><%= f %></label>
+      </div>
+    <% }) %>
+    <button class="btn btn-primary mt-2">Save</button>
+  </form>
+</div>
+<%- include('partials/foot') %>
