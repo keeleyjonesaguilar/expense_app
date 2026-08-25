@@ -3,7 +3,7 @@ const fs = require('fs');
 const Database = require('better-sqlite3');
 const bcrypt = require('bcryptjs');
 
-const { ESTABLISHED_CATEGORIES } = require('./constants');
+const { ESTABLISHED_CATEGORIES, DEFAULT_COLUMN_ALIASES } = require('./constants');
 
 const BASE_DIR = path.join(__dirname, '..');
 
@@ -164,6 +164,13 @@ function createSchema() {
       key TEXT PRIMARY KEY,
       value TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS column_aliases (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      field TEXT NOT NULL,
+      alias TEXT NOT NULL,
+      UNIQUE(field, alias)
+    );
   `);
 }
 
@@ -270,8 +277,21 @@ addColumnIfMissing('transactions', 'quantity REAL');
 addColumnIfMissing('transactions', 'unit_price REAL');
 addColumnIfMissing('transactions', 'ordered_at TEXT');
 addColumnIfMissing('categories', "recurrence_basis TEXT NOT NULL DEFAULT 'recurring-monthly'");
+addColumnIfMissing('categories', 'added_reason TEXT');
+addColumnIfMissing('transactions', 'upload_id INTEGER REFERENCES uploads(id)');
+
+// Seed the bulk-import column-alias matcher's starting data, same
+// insert-if-missing pattern as seedCategories() below.
+function seedColumnAliases() {
+  const insert = db.prepare('INSERT OR IGNORE INTO column_aliases (field, alias) VALUES (?, ?)');
+  const seedAll = db.transaction((rows) => {
+    for (const [field, alias] of rows) insert.run(field, alias);
+  });
+  seedAll(DEFAULT_COLUMN_ALIASES);
+}
 
 seedCategories();
+seedColumnAliases();
 bootstrapAdmin();
 
 // Attached directly to the exported db instance (rather than changing the
