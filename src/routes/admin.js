@@ -34,7 +34,30 @@ function findOrCreateVendor(name) {
 // GET /admin -- ported from app.py's admin_dashboard().
 router.get('/admin', (req, res) => {
   const txs = db.prepare(`${TX_JOIN_SELECT} WHERE t.status = ?`).all(STATUS_APPROVED).map(hydrate);
-  const summary = computeSpendSummary(txs);
+
+  // Years with at least one approved transaction, most recent first --
+  // drives the year selector. A year with data always appears even if
+  // every transaction in it nets to $0, per spec (don't silently drop it).
+  const availableYears = db
+    .prepare("SELECT DISTINCT strftime('%Y', date) AS y FROM transactions WHERE status = ? ORDER BY 1 DESC")
+    .all(STATUS_APPROVED)
+    .map((r) => r.y)
+    .filter(Boolean);
+
+  const currentCalendarYear = String(new Date().getFullYear());
+  const dashboardDefault = db.getSetting('dashboard_year_default', 'current-year');
+  let selectedYear = req.query.year && availableYears.includes(req.query.year) ? req.query.year : null;
+  if (!selectedYear) {
+    if (dashboardDefault === 'most-recent' && availableYears.length) {
+      selectedYear = availableYears[0];
+    } else if (availableYears.includes(currentCalendarYear)) {
+      selectedYear = currentCalendarYear;
+    } else {
+      selectedYear = availableYears[0] || currentCalendarYear;
+    }
+  }
+
+  const summary = computeSpendSummary(txs, selectedYear);
 
   const pendingCount = db
     .prepare('SELECT COUNT(*) AS n FROM transactions WHERE status = ?')
@@ -46,18 +69,28 @@ router.get('/admin', (req, res) => {
     .prepare('SELECT COALESCE(SUM(amount), 0) AS total FROM transactions WHERE status IN (?, ?)')
     .get(STATUS_PENDING, STATUS_AWAITING_ORDER).total;
 
+  const pendingList = db
+    .prepare(`${TX_JOIN_SELECT} WHERE t.status = ? ORDER BY t.created_at ASC LIMIT 8`)
+    .all(STATUS_PENDING)
+    .map(hydrate);
+
   res.render('admin_dashboard', {
     title: 'Dashboard',
+    available_years: availableYears,
+    selected_year: selectedYear,
     total_spend: summary.totalSpend,
     onetime_total: summary.onetimeTotal,
     recurring_total: summary.recurringTotal,
+    event_marketing_total: summary.eventMarketingTotal,
     pending_count: pendingCount,
+    pending_list: pendingList,
     upcoming_spend: upcomingSpend,
     top_categories: summary.topCategories.slice(0, 10),
     top_vendors: summary.topVendors.slice(0, 10),
     by_employee: summary.byEmployeeSorted,
     months_sorted: summary.monthsSorted,
     year_over_year: summary.yearOverYear,
+    no_prior_year_data: summary.noPriorYearData,
     prev_year: summary.prevYear,
     curr_year: summary.currYear,
   });
@@ -96,7 +129,11 @@ router.post('/admin/approvals/:txId/approve', (req, res) => {
       ? `Approved (awaiting order): ${tx.description || tx.id}`
       : `Approved: ${tx.description || tx.id}`
   );
-  res.redirect('/admin/approvals');
+  // Approve/Reject mini-forms on the dashboard's pending list pass a
+  // hidden `next` field so the admin lands back on the dashboard instead
+  // of the full Approvals page; the standalone Approvals page doesn't
+  // send it, so it keeps redirecting to itself as before.
+  res.redirect(req.body.next || '/admin/approvals');
 });
 
 router.post('/admin/approvals/:txId/confirm-ordered', (req, res) => {
@@ -117,7 +154,7 @@ router.post('/admin/approvals/:txId/reject', (req, res) => {
     "UPDATE transactions SET status = ?, approved_by_id = ?, approved_at = datetime('now'), rejection_reason = ? WHERE id = ?"
   ).run(STATUS_REJECTED, req.currentUser.id, req.body.reason || '', tx.id);
   flash(req, 'info', `Rejected: ${tx.description || tx.id}`);
-  res.redirect('/admin/approvals');
+  res.redirect(req.body.next || '/admin/approvals');
 });
 
 // GET /admin/transactions
@@ -129,7 +166,12 @@ router.get('/admin/transactions', (req, res) => {
   const empId = req.query.employee_id ? parseInt(req.query.employee_id, 10) : null;
   const oneTime = req.query.one_time;
   const status = req.query.status;
+  const uploadId = req.query.upload_id ? parseInt(req.query.upload_id, 10) : null;
 
+  if (uploadId) {
+    clauses.push('t.upload_id = ?');
+    params.push(uploadId);
+  }
   if (catId) {
     clauses.push('t.category_id = ?');
     params.push(catId);

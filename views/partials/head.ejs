@@ -26,25 +26,30 @@
   </style>
 </head>
 <body>
+<%
+const isActive = (href) => (typeof currentPath !== 'undefined' && (currentPath === href || currentPath.startsWith(href + '/'))) ? ' active' : '';
+%>
 <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom mb-4">
   <div class="container-fluid px-4">
     <a class="navbar-brand" href="/">Spend Tracker</a>
-    <div class="collapse navbar-collapse">
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="mainNav">
       <ul class="navbar-nav me-auto">
         <% if (currentUser.is_authenticated) { %>
           <% if (currentUser.is_admin) { %>
-            <li class="nav-item"><a class="nav-link" href="/admin">Dashboard</a></li>
-            <li class="nav-item"><a class="nav-link" href="/admin/approvals">Approvals</a></li>
-            <li class="nav-item"><a class="nav-link" href="/admin/transactions">Transactions</a></li>
-            <li class="nav-item"><a class="nav-link" href="/admin/import">Import</a></li>
-            <li class="nav-item"><a class="nav-link" href="/admin/forecast">Forecast</a></li>
-            <li class="nav-item"><a class="nav-link" href="/admin/reports">Reports</a></li>
-            <li class="nav-item"><a class="nav-link" href="/marketing">Marketing &amp; ROI</a></li>
-            <li class="nav-item"><a class="nav-link" href="/admin/settings">Settings</a></li>
+            <li class="nav-item"><a class="nav-link<%= isActive('/admin') %>" href="/admin">Dashboard</a></li>
+            <li class="nav-item"><a class="nav-link<%= isActive('/admin/approvals') %>" href="/admin/approvals">Approvals</a></li>
+            <li class="nav-item"><a class="nav-link<%= isActive('/admin/transactions') %>" href="/admin/transactions">Transactions</a></li>
+            <li class="nav-item"><a class="nav-link<%= isActive('/admin/forecast') %>" href="/admin/forecast">Forecast</a></li>
+            <li class="nav-item"><a class="nav-link<%= isActive('/admin/reports') %>" href="/admin/reports">Reports</a></li>
+            <li class="nav-item"><a class="nav-link<%= isActive('/marketing') %>" href="/marketing">Marketing &amp; ROI</a></li>
+            <li class="nav-item"><a class="nav-link<%= isActive('/admin/settings') %>" href="/admin/settings">Settings</a></li>
           <% } else { %>
-            <li class="nav-item"><a class="nav-link" href="/submit">Submit Expense</a></li>
-            <li class="nav-item"><a class="nav-link" href="/my-reports">My Reports</a></li>
-            <li class="nav-item"><a class="nav-link" href="/marketing">Marketing &amp; ROI</a></li>
+            <li class="nav-item"><a class="nav-link<%= isActive('/submit') %>" href="/submit">Submit Expense</a></li>
+            <li class="nav-item"><a class="nav-link<%= isActive('/my-reports') %>" href="/my-reports">My Reports</a></li>
+            <li class="nav-item"><a class="nav-link<%= isActive('/marketing') %>" href="/marketing">Marketing &amp; ROI</a></li>
           <% } %>
         <% } %>
       </ul>

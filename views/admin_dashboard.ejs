@@ -1,9 +1,26 @@
 <%
+const hasCategories = top_categories && top_categories.length > 0;
+const hasEmployees = by_employee && by_employee.length > 0;
+const hasMonths = months_sorted && months_sorted.length > 0;
+const hasSplit = (recurring_total + onetime_total + event_marketing_total) > 0;
+
+// Cheap trend indicator on Total Spend vs. the same comparable period last
+// year -- reuses the year-over-year data already computed for the table
+// below rather than a separate query. Approximate (sums whatever
+// categories appear in either year), not used anywhere money-critical.
+const yoyPrevTotal = (year_over_year || []).reduce((sum, r) => sum + r.prev, 0);
+const yoyCurrTotal = (year_over_year || []).reduce((sum, r) => sum + r.curr, 0);
+const showTrend = !no_prior_year_data && year_over_year && year_over_year.length > 0;
+const trendUp = yoyCurrTotal > yoyPrevTotal;
+const trendPct = yoyPrevTotal ? Math.abs(((yoyCurrTotal - yoyPrevTotal) / yoyPrevTotal) * 100) : 0;
+
 const extraScripts = `
 <script src="/static/vendor/chart.umd.min.js"></script>
 <script>
 const PALETTE = ['#2a78d6','#eb6834','#1baf7a','#eda100','#e87ba4','#008300','#4a3aa7','#e34948'];
+const SPLIT_COLORS = { recurring: '#2a78d6', onetime: '#eb6834', eventMarketing: '#1baf7a' };
 
+${hasCategories ? `
 new Chart(document.getElementById('catChart'), {
   type: 'bar',
   data: {
@@ -19,8 +36,9 @@ new Chart(document.getElementById('catChart'), {
     plugins: { legend: { display: false } },
     scales: { x: { ticks: { callback: v => '$' + v.toLocaleString() } } }
   }
-});
+});` : ''}
 
+${hasEmployees ? `
 new Chart(document.getElementById('empChart'), {
   type: 'doughnut',
   data: {
@@ -31,8 +49,9 @@ new Chart(document.getElementById('empChart'), {
     }]
   },
   options: { plugins: { legend: { position: 'right' } } }
-});
+});` : ''}
 
+${hasMonths ? `
 new Chart(document.getElementById('monthChart'), {
   type: 'line',
   data: {
@@ -48,52 +67,149 @@ new Chart(document.getElementById('monthChart'), {
     plugins: { legend: { display: false } },
     scales: { y: { ticks: { callback: v => '$' + v.toLocaleString() } } }
   }
-});
+});` : ''}
+
+${hasSplit ? `
+new Chart(document.getElementById('splitChart'), {
+  type: 'doughnut',
+  data: {
+    labels: ['Recurring', 'One-Time', 'Event/Marketing'],
+    datasets: [{
+      data: [${recurring_total}, ${onetime_total}, ${event_marketing_total}],
+      backgroundColor: [SPLIT_COLORS.recurring, SPLIT_COLORS.onetime, SPLIT_COLORS.eventMarketing],
+    }]
+  },
+  options: { plugins: { legend: { position: 'right' } } }
+});` : ''}
 </script>
 `;
 %>
 <%- include('partials/head', { title: 'Dashboard' }) %>
-<h3 class="mb-3">Admin Dashboard</h3>
+<style>
+  .dashboard-title { font-size: 1.75rem; font-weight: 700; }
+  .stat-tile.accent-recurring { border-top: 3px solid #2a78d6; }
+  .stat-tile.accent-onetime { border-top: 3px solid #eb6834; }
+  .stat-tile.accent-event { border-top: 3px solid #1baf7a; }
+  .chart-row { margin-top: 1.5rem; }
+  .empty-chart-state { display: flex; align-items: center; justify-content: center; height: 220px; color: #6b6a63; font-size: .9rem; }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h3 class="dashboard-title mb-0">Admin Dashboard</h3>
+  <form method="get" class="d-flex align-items-center gap-2">
+    <label class="form-label mb-0 small text-muted">Year</label>
+    <select name="year" class="form-select form-select-sm" onchange="this.form.submit()" style="width:110px">
+      <% available_years.forEach(function (y) { %>
+        <option value="<%= y %>" <%= y === selected_year ? 'selected' : '' %>><%= y %></option>
+      <% }) %>
+      <% if (!available_years.includes(selected_year)) { %>
+        <option value="<%= selected_year %>" selected><%= selected_year %> (no data)</option>
+      <% } %>
+    </select>
+  </form>
+</div>
 
 <div class="row g-3 mb-4">
-  <div class="col-md-3"><div class="stat-tile"><div class="label">Total Approved Spend</div><div class="value">$<%= fmtMoney(total_spend) %></div></div></div>
-  <div class="col-md-3"><div class="stat-tile"><div class="label">Recurring Spend</div><div class="value">$<%= fmtMoney(recurring_total) %></div></div></div>
-  <div class="col-md-3"><div class="stat-tile"><div class="label">One-Time Spend</div><div class="value">$<%= fmtMoney(onetime_total) %></div></div></div>
+  <div class="col-md-3">
+    <div class="stat-tile">
+      <div class="label">Total Approved Spend</div>
+      <div class="value">$<%= fmtMoney(total_spend) %>
+        <% if (showTrend) { %>
+          <span class="small <%= trendUp ? 'text-danger' : 'text-success' %>" title="vs. same period last year">
+            <%= trendUp ? '▲' : '▼' %> <%= trendPct.toFixed(0) %>%
+          </span>
+        <% } %>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-3"><div class="stat-tile accent-recurring"><div class="label">Recurring Spend</div><div class="value">$<%= fmtMoney(recurring_total) %></div></div></div>
+  <div class="col-md-3"><div class="stat-tile accent-onetime"><div class="label">One-Time Spend</div><div class="value">$<%= fmtMoney(onetime_total) %></div></div></div>
+  <div class="col-md-3"><div class="stat-tile accent-event"><div class="label">Event/Marketing Spend</div><div class="value">$<%= fmtMoney(event_marketing_total) %></div>
+    <div class="small text-muted">Events + Catering</div>
+  </div></div>
+</div>
+
+<div class="row g-3 mb-4">
   <div class="col-md-3"><div class="stat-tile"><div class="label">Pending Approvals</div><div class="value"><%= pending_count %></div>
-    <% if (pending_count) { %><a href="/admin/approvals" class="small">Review now &rarr;</a><% } %>
+    <% if (pending_count) { %><a href="/admin/approvals" class="small">View all &rarr;</a><% } %>
   </div></div>
   <div class="col-md-3"><div class="stat-tile"><div class="label">Potential Upcoming Spend</div><div class="value">$<%= fmtMoney(upcoming_spend) %></div>
     <div class="small text-muted">Pending + approved-not-yet-ordered</div>
   </div></div>
 </div>
 
-<div class="row g-3 mb-4">
+<div class="row g-3 chart-row mb-4">
   <div class="col-md-6">
     <div class="card p-3">
       <h6>Top Categories</h6>
-      <canvas id="catChart" height="220"></canvas>
+      <% if (hasCategories) { %><canvas id="catChart" height="220"></canvas>
+      <% } else { %><div class="empty-chart-state">No spend recorded for this period yet</div><% } %>
     </div>
   </div>
   <div class="col-md-6">
     <div class="card p-3">
-      <h6>Spending by Employee</h6>
-      <canvas id="empChart" height="220"></canvas>
+      <h6>Recurring / One-Time / Event-Marketing</h6>
+      <% if (hasSplit) { %><canvas id="splitChart" height="220"></canvas>
+      <% } else { %><div class="empty-chart-state">No spend recorded for this period yet</div><% } %>
     </div>
   </div>
 </div>
 
-<div class="row g-3 mb-4">
-  <div class="col-md-12">
+<div class="row g-3 chart-row mb-4">
+  <div class="col-md-6">
+    <div class="card p-3">
+      <h6>Spending by Employee</h6>
+      <% if (hasEmployees) { %><canvas id="empChart" height="220"></canvas>
+      <% } else { %><div class="empty-chart-state">No spend recorded for this period yet</div><% } %>
+    </div>
+  </div>
+  <div class="col-md-6">
     <div class="card p-3">
       <h6>Monthly Trend</h6>
-      <canvas id="monthChart" height="100"></canvas>
+      <% if (hasMonths) { %><canvas id="monthChart" height="220"></canvas>
+      <% } else { %><div class="empty-chart-state">No spend recorded for this period yet</div><% } %>
     </div>
   </div>
 </div>
 
 <div class="card p-3 mb-4">
+  <h6>Pending Approvals</h6>
+  <% if (!pending_list || pending_list.length === 0) { %>
+    <p class="text-muted small mb-0">No pending approvals.</p>
+  <% } else { %>
+    <table class="table table-sm mb-0">
+      <thead><tr><th>Date</th><th>Employee</th><th>Category</th><th class="text-end">Amount</th><th></th></tr></thead>
+      <tbody>
+        <% pending_list.forEach(function (t) { %>
+        <tr>
+          <td><%= fmtDate(t.date) %></td>
+          <td><%= t.employee ? t.employee.name : (t.submitted_by ? t.submitted_by.name : '-') %></td>
+          <td><%= t.category ? t.category.name : 'Uncategorized' %></td>
+          <td class="text-end">$<%= fmt2(t.amount) %></td>
+          <td class="text-end">
+            <form method="post" action="/admin/approvals/<%= t.id %>/approve" class="d-inline">
+              <input type="hidden" name="next" value="/admin">
+              <button class="btn btn-success btn-sm">Approve</button>
+            </form>
+            <form method="post" action="/admin/approvals/<%= t.id %>/reject" class="d-inline">
+              <input type="hidden" name="next" value="/admin">
+              <button class="btn btn-outline-danger btn-sm">Reject</button>
+            </form>
+          </td>
+        </tr>
+        <% }) %>
+      </tbody>
+    </table>
+    <% if (pending_count > pending_list.length) { %>
+      <div class="small mt-2"><a href="/admin/approvals">View all (<%= pending_count %>) pending &rarr;</a></div>
+    <% } %>
+  <% } %>
+</div>
+
+<div class="card p-3 mb-4">
   <h6>Top Vendors</h6>
-  <table class="table table-sm">
+  <% if (top_vendors && top_vendors.length) { %>
+  <table class="table table-sm mb-0">
     <thead><tr><th>Vendor</th><th class="text-end">Total Spend</th></tr></thead>
     <tbody>
       <% top_vendors.forEach(function (pair) { %>
@@ -101,27 +217,40 @@ new Chart(document.getElementById('monthChart'), {
       <% }) %>
     </tbody>
   </table>
+  <% } else { %><p class="text-muted small mb-0">No spend recorded for this period yet.</p><% } %>
 </div>
 
-<% if (year_over_year && year_over_year.length) { %>
 <div class="card p-3">
   <h6>Year-over-Year by Category</h6>
-  <table class="table table-sm">
-    <thead><tr><th>Category</th><th class="text-end"><%= prev_year %></th><th class="text-end"><%= curr_year %></th><th class="text-end">Change</th></tr></thead>
-    <tbody>
-      <% year_over_year.forEach(function (row) { %>
-      <tr>
-        <td><%= row.name %></td>
-        <td class="text-end">$<%= fmtMoney(row.prev) %></td>
-        <td class="text-end">$<%= fmtMoney(row.curr) %></td>
-        <td class="text-end <%= row.change > 0 ? 'text-danger' : row.change < 0 ? 'text-success' : 'text-muted' %>">
-          <%= row.change > 0 ? '+$' + fmtMoney(row.change) : row.change < 0 ? '-$' + fmtMoney(-row.change) : '$' + fmtMoney(0) %>
-        </td>
-      </tr>
-      <% }) %>
-    </tbody>
-  </table>
+  <% if (no_prior_year_data && year_over_year && year_over_year.length) { %>
+    <p class="text-muted small">No prior-year data available for <%= prev_year %> — showing current-year figures only.</p>
+    <table class="table table-sm">
+      <thead><tr><th>Category</th><th class="text-end">Current Year</th></tr></thead>
+      <tbody>
+        <% year_over_year.forEach(function (row) { %>
+        <tr><td><%= row.name %></td><td class="text-end">$<%= fmtMoney(row.curr) %></td></tr>
+        <% }) %>
+      </tbody>
+    </table>
+  <% } else if (year_over_year && year_over_year.length) { %>
+    <table class="table table-sm">
+      <thead><tr><th>Category</th><th class="text-end">Previous Year</th><th class="text-end">Current Year</th><th class="text-end">Change</th></tr></thead>
+      <tbody>
+        <% year_over_year.forEach(function (row) { %>
+        <tr>
+          <td><%= row.name %></td>
+          <td class="text-end">$<%= fmtMoney(row.prev) %></td>
+          <td class="text-end">$<%= fmtMoney(row.curr) %></td>
+          <td class="text-end <%= row.change > 0 ? 'text-danger' : row.change < 0 ? 'text-success' : 'text-muted' %>">
+            <%= row.change > 0 ? '+$' + fmtMoney(row.change) : row.change < 0 ? '-$' + fmtMoney(-row.change) : '$' + fmtMoney(0) %>
+          </td>
+        </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  <% } else { %>
+    <p class="text-muted small mb-0">No spend recorded for this period yet.</p>
+  <% } %>
 </div>
-<% } %>
 
 <%- include('partials/foot', { extraScripts }) %>

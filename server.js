@@ -45,6 +45,7 @@ app.use(popFlash);
 // for Jinja's strftime/format filters used throughout the original
 // templates (e.g. "%.2f"|format(x), "{:,.2f}".format(x), date.strftime(...)).
 app.use((req, res, next) => {
+  res.locals.currentPath = req.path;
   res.locals.fmt2 = (n) => Number(n || 0).toFixed(2);
   res.locals.fmtMoney = (n) =>
     Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
