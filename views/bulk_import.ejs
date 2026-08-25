@@ -1,10 +1,14 @@
 <%- include('partials/head', { title: 'Bulk Import' }) %>
+<ul class="nav nav-tabs mb-3">
+  <li class="nav-item"><a class="nav-link" href="/admin/transactions">All Transactions</a></li>
+  <li class="nav-item"><a class="nav-link active" href="/admin/import">Import</a></li>
+</ul>
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h3 class="mb-0">Bulk Import — Spreadsheets, PDFs &amp; Images</h3>
   <a href="/admin/import/template.csv" class="btn btn-outline-secondary btn-sm">Download Import Template</a>
 </div>
 <div class="card p-4 mb-4">
-  <p class="text-muted">Upload an Amazon/Staples-style spreadsheet export (CSV/XLSX), or a PDF/image statement or receipt.
+  <p class="text-muted">Upload a spreadsheet export (CSV/XLSX), or a PDF/image statement or receipt.
   Every row gets a suggested category you can correct before anything is saved.</p>
   <form method="post" action="/admin/import" enctype="multipart/form-data" class="row g-2">
     <div class="col-md-8"><input type="file" name="file" class="form-control" accept=".csv,.xlsx,.xls,.pdf,.png,.jpg,.jpeg" required></div>
@@ -31,12 +35,43 @@
 </div>
 <% } %>
 
+<% if (column_mapping && column_mapping.length) { %>
+<div class="card p-3 mb-4">
+  <h6>Column Mapping</h6>
+  <p class="text-muted small mb-2">How each source column was matched. Columns marked "Not imported" are dropped entirely -- their data doesn't end up anywhere on the resulting transactions. Change a mapping and click Re-map to re-preview.</p>
+  <form method="get" action="/admin/import">
+    <input type="hidden" name="upload_id" value="<%= upload_id %>">
+    <% if (current_sheet) { %><input type="hidden" name="sheet" value="<%= current_sheet %>"><% } %>
+    <table class="table table-sm mb-2">
+      <thead><tr><th>Source Column</th><th>Matched To</th></tr></thead>
+      <tbody>
+        <% column_mapping.forEach(function (m) { %>
+        <tr>
+          <td><%= m.column %></td>
+          <td>
+            <select name="map[<%= m.column %>]" class="form-select form-select-sm" style="width:200px">
+              <option value="none" <%= !m.matchedField ? 'selected' : '' %>>Not imported</option>
+              <% remappable_fields.forEach(function (f) { %>
+                <option value="<%= f %>" <%= m.matchedField === f ? 'selected' : '' %>><%= f %></option>
+              <% }) %>
+            </select>
+          </td>
+        </tr>
+        <% }) %>
+      </tbody>
+    </table>
+    <button class="btn btn-outline-primary btn-sm">Re-map &amp; Preview</button>
+  </form>
+</div>
+<% } %>
+
 <% if (preview_rows) { %>
 <form method="post" action="/admin/import/<%= upload_id %>/commit">
   <div class="card p-3">
     <h6>Review before importing (<%= preview_rows.length %> rows)</h6>
+    <div style="overflow-x:auto">
     <table class="table table-sm">
-      <thead><tr><th>Skip</th><th>Date</th><th>Qty</th><th>Price/Item</th><th>Total Price</th><th>Category</th><th>Vendor</th><th>Description</th><th>Link</th><th>Notes</th><th>One-Time</th></tr></thead>
+      <thead><tr><th>Skip</th><th>Date</th><th>Qty</th><th>Price/Item</th><th>Total Price</th><th>Category</th><th>Vendor</th><th>Employee</th><th>Description</th><th>Link</th><th>Notes</th><th>One-Time</th></tr></thead>
       <tbody>
       <% preview_rows.forEach(function (row, i) { %>
         <tr>
@@ -51,6 +86,12 @@
             </select>
           </td>
           <td><input type="text" name="vendor_<%= i %>" value="<%= row.vendor || '' %>" class="form-control form-control-sm" style="width:120px"></td>
+          <td>
+            <select name="employee_id_<%= i %>" class="form-select form-select-sm" style="width:130px">
+              <option value="">-- none --</option>
+              <% employees.forEach(function (e) { %><option value="<%= e.id %>" <%= row.employee_id === e.id ? 'selected' : '' %>><%= e.name %></option><% }) %>
+            </select>
+          </td>
           <td><input type="text" name="description_<%= i %>" value="<%= row.description || '' %>" class="form-control form-control-sm" style="width:200px"></td>
           <td><input type="url" name="link_<%= i %>" value="<%= row.link || '' %>" class="form-control form-control-sm" style="width:140px"></td>
           <td><input type="text" name="notes_<%= i %>" value="<%= row.notes || '' %>" class="form-control form-control-sm" style="width:180px"></td>
@@ -59,6 +100,7 @@
       <% }) %>
       </tbody>
     </table>
+    </div>
     <button class="btn btn-success">Commit Selected Rows</button>
   </div>
 </form>
@@ -70,7 +112,9 @@
     <thead><tr><th>File</th><th>Type</th><th>Uploaded</th><th>Rows Found</th><th>Rows Imported</th></tr></thead>
     <tbody>
     <% recent_uploads.forEach(function (u) { %>
-      <tr><td><%= u.filename %></td><td><%= u.file_type %></td><td><%= fmtDateTime(u.uploaded_at) %></td><td><%= u.row_count %></td><td><%= u.imported_count %></td></tr>
+      <tr><td><%= u.filename %></td><td><%= u.file_type %></td><td><%= fmtDateTime(u.uploaded_at) %></td><td><%= u.row_count %></td><td>
+        <% if (u.imported_count) { %><a href="/admin/transactions?upload_id=<%= u.id %>"><%= u.imported_count %></a><% } else { %>0<% } %>
+      </td></tr>
     <% }) %>
     </tbody>
   </table>

@@ -24,6 +24,7 @@ const path = require('path');
 const { parse: parseCsv } = require('csv-parse/sync');
 const XLSX = require('xlsx');
 
+const db = require('../db');
 const { toISODate } = require('./util');
 
 // ---------------------------------------------------------------------------
@@ -144,20 +145,20 @@ function guessVendor(text) {
 // ---------------------------------------------------------------------------
 // Spreadsheet extraction
 // ---------------------------------------------------------------------------
-const COLUMN_ALIASES = {
-  date: ['date', 'order date', 'transaction date', 'purchase date'],
-  amount: ['amount', 'total', 'item net total', 'order total', 'price', 'cost'],
-  description: ['description', 'title', 'item', 'item description', 'product', 'standard item name'],
-  vendor: ['vendor', 'seller', 'seller name', 'merchant', 'location'],
-  link: ['link', 'url', 'product link'],
-  category: ['category', 'internal product category'],
-  notes: ['notes'],
-  quantity: ['item quantity', 'quantity', 'qty'],
-  unit_price: ['price per item', 'unit price'],
-  // No dedicated Transaction column for this one -- captured into `notes`
-  // on import so it isn't silently dropped.
-  order_number: ['item/order #', 'order #', 'order number'],
-};
+// Column-alias matching is DB-backed (the `column_aliases` table, seeded
+// from constants.js's DEFAULT_COLUMN_ALIASES on first boot) so Settings ->
+// Import Mapping can teach the matcher new source-column names without a
+// code change. Reloaded per call rather than cached, since it's a tiny
+// table and this keeps a just-added Settings alias effective immediately.
+function loadColumnAliases() {
+  const rows = db.prepare('SELECT field, alias FROM column_aliases').all();
+  const map = {};
+  for (const { field, alias } of rows) {
+    if (!map[field]) map[field] = [];
+    map[field].push(alias);
+  }
+  return map;
+}
 
 function findCol(columns, aliases) {
   const lower = {};
@@ -202,10 +203,10 @@ function coerceDate(value) {
 // e.g. a workbook's "2025"/"2026" transaction-log tabs from a plain
 // single-column "Categories" list or other summary tabs that happen to share
 // the same workbook.
-function sheetLooksLikeTransactions(headerRow) {
+function sheetLooksLikeTransactions(headerRow, aliasMap) {
   const cols = headerRow.map((c) => String(c || '').toLowerCase().trim());
-  const hasAlias = (aliases) => aliases.some((a) => cols.includes(a));
-  return hasAlias(COLUMN_ALIASES.date) && hasAlias(COLUMN_ALIASES.amount);
+  const hasAlias = (aliases) => (aliases || []).some((a) => cols.includes(a));
+  return hasAlias(aliasMap.date) && hasAlias(aliasMap.amount);
 }
 
 // Lists sheet names in an xlsx/xls workbook, flagging which ones look like
@@ -214,23 +215,67 @@ function sheetLooksLikeTransactions(headerRow) {
 // null for CSVs, which have no concept of multiple sheets.
 function listSpreadsheetSheets(filepath) {
   if (filepath.toLowerCase().endsWith('.csv')) return null;
+  const aliasMap = loadColumnAliases();
   const workbook = XLSX.readFile(filepath);
   return workbook.SheetNames.map((name) => {
     const rows = XLSX.utils.sheet_to_json(workbook.Sheets[name], { header: 1, raw: true, blankrows: false });
     return {
       name,
       rowCount: Math.max(0, rows.length - 1),
-      looksLikeTransactions: rows.length > 0 && sheetLooksLikeTransactions(rows[0]),
+      looksLikeTransactions: rows.length > 0 && sheetLooksLikeTransactions(rows[0], aliasMap),
     };
   });
 }
 
-// Returns a list of dict rows: date, amount, description, vendor, suggested_category.
-// `sheetName`, for xlsx/xls, picks a specific sheet -- if omitted, the first
-// sheet that looks like a transaction log wins (see sheetLooksLikeTransactions),
-// falling back to the first sheet in the workbook if none do.
-function extractFromSpreadsheet(filepath, sheetName) {
+function parseOneTimeValue(raw, fallback) {
+  const s = cleanStr(raw);
+  if (s === null) return fallback;
+  const lower = s.toLowerCase();
+  if (['yes', 'true', '1', 'one-time', 'one time', 'one_time'].includes(lower)) return true;
+  if (['no', 'false', '0', 'recurring'].includes(lower)) return false;
+  return fallback;
+}
+
+// Resolves, for each column in `columns`, which field (if any) it maps to --
+// explicit `overrideMap` entries (raw source column name -> field name, or
+// 'none' to force-exclude) win over the alias-based auto-match. Returns the
+// per-field source-column map plus a per-column summary
+// ({column, matchedField}) for the review-grid UI.
+function resolveColumnMapping(columns, aliasMap, overrideMap) {
+  const cols = {};
+  for (const key of Object.keys(aliasMap)) {
+    cols[key] = findCol(columns, aliasMap[key]);
+  }
+  if (overrideMap) {
+    for (const [sourceCol, targetField] of Object.entries(overrideMap)) {
+      if (!columns.includes(sourceCol)) continue;
+      // Clear this column from whatever field auto-matched it, then
+      // reassign per the override (unless the override says 'none').
+      for (const key of Object.keys(cols)) {
+        if (cols[key] === sourceCol) cols[key] = null;
+      }
+      if (targetField && targetField !== 'none') cols[targetField] = sourceCol;
+    }
+  }
+  const columnMapping = columns.map((column) => ({
+    column,
+    matchedField: Object.keys(cols).find((key) => cols[key] === column) || null,
+  }));
+  return { cols, columnMapping };
+}
+
+// Returns { rows, columnMapping }. `sheetName`, for xlsx/xls, picks a
+// specific sheet -- if omitted, the first sheet that looks like a
+// transaction log wins (see sheetLooksLikeTransactions), falling back to
+// the first sheet in the workbook if none do. `overrideMap` (optional),
+// keyed by raw source column name, lets a caller manually re-map a column
+// to a different field (or 'none' to exclude it) ahead of the normal
+// alias-based auto-match -- used by the bulk-import review grid's
+// "Re-map & Preview" control; not persisted (Settings -> Import Mapping is
+// what teaches the matcher new aliases permanently).
+function extractFromSpreadsheet(filepath, sheetName, overrideMap) {
   let records;
+  const aliasMap = loadColumnAliases();
   if (filepath.toLowerCase().endsWith('.csv')) {
     const content = fs.readFileSync(filepath, 'utf8');
     records = parseCsv(content, { columns: true, skip_empty_lines: true, relax_column_count: true });
@@ -240,21 +285,24 @@ function extractFromSpreadsheet(filepath, sheetName) {
     if (!name) {
       name = workbook.SheetNames.find((n) => {
         const rows = XLSX.utils.sheet_to_json(workbook.Sheets[n], { header: 1, raw: true, blankrows: false });
-        return rows.length > 0 && sheetLooksLikeTransactions(rows[0]);
+        return rows.length > 0 && sheetLooksLikeTransactions(rows[0], aliasMap);
       });
     }
     if (!name) name = workbook.SheetNames[0];
     records = XLSX.utils.sheet_to_json(workbook.Sheets[name], { defval: null, raw: true });
   }
 
-  if (!records.length) return [];
+  if (!records.length) return { rows: [], columnMapping: [] };
   const columns = Object.keys(records[0]);
-  const cols = {};
-  for (const key of Object.keys(COLUMN_ALIASES)) {
-    cols[key] = findCol(columns, COLUMN_ALIASES[key]);
-  }
+  const { cols, columnMapping } = resolveColumnMapping(columns, aliasMap, overrideMap);
+  const employees = db.prepare('SELECT id, name FROM users').all();
+  const findEmployee = (name) => {
+    if (!name) return null;
+    const lower = name.toLowerCase();
+    return employees.find((e) => e.name.toLowerCase() === lower) || null;
+  };
 
-  return records.map((r) => {
+  const rows = records.map((r) => {
     const desc = cleanStr(cols.description ? r[cols.description] : null) || '';
     const amt = cols.amount ? coerceAmount(r[cols.amount]) : null;
     const dateVal = cols.date ? coerceDate(r[cols.date]) : null;
@@ -262,20 +310,26 @@ function extractFromSpreadsheet(filepath, sheetName) {
     const link = cleanStr(cols.link ? r[cols.link] : null);
     const quantity = coerceAmount(cols.quantity ? r[cols.quantity] : null);
     const unitPrice = coerceAmount(cols.unit_price ? r[cols.unit_price] : null);
+    const employeeName = cleanStr(cols.employee ? r[cols.employee] : null);
+    const employee = findEmployee(employeeName);
 
     // The source sheet's own category column is authoritative -- an admin
     // (or the exporting system) already assigned it, so trust it over the
     // keyword-guessed category instead of just using it as a tie-breaker.
     const explicitCategory = cleanStr(cols.category ? r[cols.category] : null);
-    // Events are almost always one-off (a sponsorship, a conference ticket)
-    // rather than a recurring monthly cost -- default the checkbox on, the
-    // reviewer can still uncheck it.
     const suggestedCategory = explicitCategory || suggestCategory(desc);
-    const suggestOneTime = suggestedCategory === 'Events';
+    // Events are almost always one-off (a sponsorship, a conference ticket)
+    // rather than a recurring monthly cost -- that's the fallback when the
+    // sheet doesn't have its own One-Time-style column; an explicit
+    // yes/no/recurring value in a matched column wins over the fallback.
+    const eventsFallback = suggestedCategory === 'Events';
+    const suggestOneTime = parseOneTimeValue(cols.one_time ? r[cols.one_time] : null, eventsFallback);
 
     // Order-# has no dedicated Transaction column, so it goes in notes
-    // rather than being silently dropped. Quantity/unit-price get their own
-    // real columns instead (see extractFromSpreadsheet's return value).
+    // rather than being silently dropped -- this is a deliberate, matched
+    // alias, unlike a genuinely unrecognized column (which is dropped
+    // entirely, not folded into notes; see resolveColumnMapping/
+    // columnMapping for what wasn't imported anywhere).
     const noteParts = [];
     const sheetNotes = cleanStr(cols.notes ? r[cols.notes] : null);
     if (sheetNotes) noteParts.push(sheetNotes);
@@ -290,12 +344,16 @@ function extractFromSpreadsheet(filepath, sheetName) {
       link,
       quantity,
       unit_price: unitPrice,
+      employee_id: employee ? employee.id : null,
+      employee_name: employee ? employee.name : employeeName,
       suggested_category: suggestedCategory,
       suggest_one_time: suggestOneTime,
       notes: noteParts.join(' | ').slice(0, 500),
       raw_text: desc,
     };
   });
+
+  return { rows, columnMapping };
 }
 
 // ---------------------------------------------------------------------------
