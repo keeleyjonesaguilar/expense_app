@@ -5,6 +5,7 @@
 const TX_JOIN_SELECT = `
   SELECT t.*,
          c.name AS category_name,
+         c.recurrence_basis AS category_recurrence_basis,
          v.name AS vendor_name,
          emp.name AS employee_name,
          sub.name AS submitted_by_name
@@ -18,12 +19,23 @@ const TX_JOIN_SELECT = `
 function hydrate(t) {
   return {
     ...t,
-    category: t.category_name ? { name: t.category_name } : null,
+    category: t.category_name ? { name: t.category_name, recurrence_basis: t.category_recurrence_basis } : null,
     vendor: t.vendor_name ? { name: t.vendor_name } : null,
     employee: t.employee_name ? { name: t.employee_name } : null,
     submitted_by: t.submitted_by_name ? { name: t.submitted_by_name } : null,
   };
 }
+
+// Display order/labels for the Recurring-spend-by-frequency breakdown --
+// kept in sync with RECURRENCE_BASIS_OPTIONS in constants.js (not imported
+// directly to avoid a circular require; this is display-only formatting).
+const RECURRENCE_BASIS_LABELS = [
+  ['recurring-weekly', 'Weekly'],
+  ['recurring-monthly', 'Monthly'],
+  ['recurring-quarterly', 'Quarterly'],
+  ['recurring-yearly', 'Yearly'],
+  ['one-time', 'One-Time (category default)'],
+];
 
 // Categories pulled out of the Recurring/One-Time split entirely (see
 // partitionSpend below) since they're tracked as their own bucket.
@@ -55,6 +67,7 @@ function computeSpendSummary(allTxs, year) {
   const byEmployee = new Map();
   const byVendor = new Map();
   const byMonth = new Map();
+  const byRecurrenceBasis = new Map();
   let onetimeTotal = 0;
   let recurringTotal = 0;
   let eventMarketingTotal = 0;
@@ -81,6 +94,11 @@ function computeSpendSummary(allTxs, year) {
       onetimeTotal += t.amount;
     } else {
       recurringTotal += t.amount;
+      // Recurring Spend combined into one number hides whether that's
+      // mostly a monthly commitment or a pile of quarterly/yearly ones --
+      // split it by each transaction's category's recurrence_basis.
+      const basis = (t.category && t.category.recurrence_basis) || 'recurring-monthly';
+      bump(byRecurrenceBasis, basis, t.amount);
     }
   }
 
@@ -99,6 +117,14 @@ function computeSpendSummary(allTxs, year) {
   const topVendors = sortDesc(byVendor);
   const byEmployeeSorted = sortDesc(byEmployee);
   const monthsSorted = [...byMonth.entries()].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+
+  // Fixed display order (weekly -> monthly -> quarterly -> yearly), only
+  // including rows that actually have spend, rather than sorting by
+  // amount -- a cadence progression reads more naturally in that order
+  // than shuffled by dollar size.
+  const recurringByBasis = RECURRENCE_BASIS_LABELS.map(([key, label]) => [label, byRecurrenceBasis.get(key) || 0]).filter(
+    ([, amount]) => amount > 0
+  );
 
   // Year-over-year by category. When a `year` was given, that's always
   // "current" and year-1 is always "previous" (the pair floats with
@@ -145,6 +171,7 @@ function computeSpendSummary(allTxs, year) {
     totalSpend,
     onetimeTotal,
     recurringTotal,
+    recurringByBasis,
     eventMarketingTotal,
     topCategories,
     topVendors,

@@ -88,6 +88,7 @@ router.get('/admin', (req, res) => {
     total_spend: summary.totalSpend,
     onetime_total: summary.onetimeTotal,
     recurring_total: summary.recurringTotal,
+    recurring_by_basis: summary.recurringByBasis,
     event_marketing_total: summary.eventMarketingTotal,
     pending_count: pendingCount,
     upcoming_spend: upcomingSpend,

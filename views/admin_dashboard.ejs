@@ -145,6 +145,17 @@ new Chart(document.getElementById('splitChart'), {
       <h6>Recurring / One-Time / Event-Marketing</h6>
       <% if (hasSplit) { %><canvas id="splitChart" height="220"></canvas>
       <% } else { %><div class="empty-chart-state">No spend recorded for this period yet</div><% } %>
+      <% if (recurring_by_basis && recurring_by_basis.length) { %>
+        <hr>
+        <div class="small text-muted text-uppercase mb-2" style="letter-spacing:.03em;">Recurring Spend by Frequency</div>
+        <table class="table table-sm mb-0">
+          <tbody>
+            <% recurring_by_basis.forEach(function (pair) { %>
+            <tr><td><%= pair[0] %></td><td class="text-end">$<%= fmtMoney(pair[1]) %></td></tr>
+            <% }) %>
+          </tbody>
+        </table>
+      <% } %>
     </div>
   </div>
 </div>
