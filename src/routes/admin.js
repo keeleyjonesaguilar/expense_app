@@ -69,11 +69,6 @@ router.get('/admin', (req, res) => {
     .prepare('SELECT COALESCE(SUM(amount), 0) AS total FROM transactions WHERE status IN (?, ?)')
     .get(STATUS_PENDING, STATUS_AWAITING_ORDER).total;
 
-  const pendingList = db
-    .prepare(`${TX_JOIN_SELECT} WHERE t.status = ? ORDER BY t.created_at ASC LIMIT 8`)
-    .all(STATUS_PENDING)
-    .map(hydrate);
-
   res.render('admin_dashboard', {
     title: 'Dashboard',
     available_years: availableYears,
@@ -83,7 +78,6 @@ router.get('/admin', (req, res) => {
     recurring_total: summary.recurringTotal,
     event_marketing_total: summary.eventMarketingTotal,
     pending_count: pendingCount,
-    pending_list: pendingList,
     upcoming_spend: upcomingSpend,
     top_categories: summary.topCategories.slice(0, 10),
     top_vendors: summary.topVendors.slice(0, 10),
@@ -96,17 +90,56 @@ router.get('/admin', (req, res) => {
   });
 });
 
-// GET /admin/approvals
+// GET /admin/approvals -- old URL, kept as a redirect for bookmarks/links.
 router.get('/admin/approvals', (req, res) => {
-  const pending = db
-    .prepare(`${TX_JOIN_SELECT} WHERE t.status = ? ORDER BY t.created_at ASC`)
-    .all(STATUS_PENDING)
+  res.redirect('/admin/transactions/requests');
+});
+
+// GET /admin/transactions/requests -- "Item Requests": everything that
+// goes through the pending -> (awaiting-order ->) approved/rejected flow
+// EXCEPT expense reports, which are reviewed inline on the main
+// Transactions tab instead (filter by Status: Pending there). In practice
+// this is supply requests. Filterable by status and category; defaults to
+// "Open" (pending + awaiting-order) so resolved items don't clutter the
+// default view but are still reachable.
+router.get('/admin/transactions/requests', (req, res) => {
+  const status = req.query.status || 'open';
+  const catId = req.query.category_id ? parseInt(req.query.category_id, 10) : null;
+
+  const clauses = ["t.source != 'expense_report'"];
+  const params = [];
+  if (status === 'open') {
+    clauses.push('t.status IN (?, ?)');
+    params.push(STATUS_PENDING, STATUS_AWAITING_ORDER);
+  } else if (status !== 'any') {
+    clauses.push('t.status = ?');
+    params.push(status);
+  }
+  if (catId) {
+    clauses.push('t.category_id = ?');
+    params.push(catId);
+  }
+
+  const requests = db
+    .prepare(`${TX_JOIN_SELECT} WHERE ${clauses.join(' AND ')} ORDER BY t.created_at DESC`)
+    .all(...params)
     .map(hydrate);
-  const awaitingOrder = db
-    .prepare(`${TX_JOIN_SELECT} WHERE t.status = ? ORDER BY t.approved_at ASC`)
-    .all(STATUS_AWAITING_ORDER)
-    .map(hydrate);
-  res.render('approvals', { title: 'Approvals', pending, awaiting_order: awaitingOrder });
+
+  res.render('item_requests', {
+    title: 'Item Requests',
+    requests,
+    categories: listCategories.all(),
+    filters: { status, category_id: req.query.category_id || '' },
+  });
+});
+
+// GET /admin/transactions/requests/:id -- full detail for one request:
+// approve/reject (with a reason) if pending, confirm-ordered if awaiting
+// order, or a read-only summary (incl. rejection reason) once resolved.
+router.get('/admin/transactions/requests/:id', (req, res) => {
+  const tx = db.prepare(`${TX_JOIN_SELECT} WHERE t.id = ?`).get(req.params.id);
+  if (!tx) return res.status(404).send('Not Found');
+  res.render('item_request_detail', { title: 'Item Request', t: hydrate(tx) });
 });
 
 router.post('/admin/approvals/:txId/approve', (req, res) => {
@@ -129,11 +162,11 @@ router.post('/admin/approvals/:txId/approve', (req, res) => {
       ? `Approved (awaiting order): ${tx.description || tx.id}`
       : `Approved: ${tx.description || tx.id}`
   );
-  // Approve/Reject mini-forms on the dashboard's pending list pass a
-  // hidden `next` field so the admin lands back on the dashboard instead
-  // of the full Approvals page; the standalone Approvals page doesn't
-  // send it, so it keeps redirecting to itself as before.
-  res.redirect(req.body.next || '/admin/approvals');
+  // Callers pass a hidden `next` field to control where this lands (the
+  // Item Requests list, an item's own detail page, back to the
+  // Transactions tab for an inline expense-report approval, etc.) --
+  // defaults to the Item Requests list, the main place these are reviewed.
+  res.redirect(req.body.next || '/admin/transactions/requests');
 });
 
 router.post('/admin/approvals/:txId/confirm-ordered', (req, res) => {
@@ -144,7 +177,7 @@ router.post('/admin/approvals/:txId/confirm-ordered', (req, res) => {
     tx.id
   );
   flash(req, 'success', `Marked ordered: ${tx.description || tx.id}`);
-  res.redirect('/admin/approvals');
+  res.redirect(req.body.next || '/admin/transactions/requests');
 });
 
 router.post('/admin/approvals/:txId/reject', (req, res) => {
@@ -154,7 +187,7 @@ router.post('/admin/approvals/:txId/reject', (req, res) => {
     "UPDATE transactions SET status = ?, approved_by_id = ?, approved_at = datetime('now'), rejection_reason = ? WHERE id = ?"
   ).run(STATUS_REJECTED, req.currentUser.id, req.body.reason || '', tx.id);
   flash(req, 'info', `Rejected: ${tx.description || tx.id}`);
-  res.redirect(req.body.next || '/admin/approvals');
+  res.redirect(req.body.next || '/admin/transactions/requests');
 });
 
 // GET /admin/transactions

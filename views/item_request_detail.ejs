@@ -1,0 +1,69 @@
+<%- include('partials/head', { title: 'Item Request' }) %>
+<%- include('partials/transactions_nav', { active: 'requests' }) %>
+<p><a href="/admin/transactions/requests">&larr; Back to Item Requests</a></p>
+
+<div class="card p-4" style="max-width:700px;">
+  <div class="d-flex justify-content-between align-items-start mb-3">
+    <h4 class="mb-0"><%= t.description %></h4>
+    <% if (t.status === 'pending') { %><span class="badge badge-pending">Pending</span>
+    <% } else if (t.status === 'awaiting_order') { %><span class="badge bg-info text-dark">Awaiting Order</span>
+    <% } else if (t.status === 'approved') { %><span class="badge badge-approved">Ordered</span>
+    <% } else { %><span class="badge badge-rejected">Rejected</span><% } %>
+  </div>
+
+  <table class="table table-sm">
+    <tbody>
+      <tr><th style="width:160px">Date requested</th><td><%= fmtDate(t.date) %></td></tr>
+      <tr><th>Category</th><td><%= t.category ? t.category.name : 'Uncategorized' %></td></tr>
+      <% if (t.quantity != null) { %><tr><th>Quantity</th><td><%= t.quantity %></td></tr><% } %>
+      <% if (t.amount) { %><tr><th>Amount</th><td>$<%= fmt2(t.amount) %></td></tr><% } %>
+      <% if (t.link) { %><tr><th>Link</th><td><a href="<%= t.link %>" target="_blank" rel="noopener"><%= t.link %></a></td></tr><% } %>
+      <% if (t.notes) { %><tr><th>Notes</th><td><%= t.notes %></td></tr><% } %>
+      <% if (t.is_one_time) { %><tr><th>One-Time</th><td>Yes</td></tr><% } %>
+      <% if (t.status === 'rejected') { %>
+        <tr><th>Rejected by</th><td><%= t.approved_by_id ? 'Admin' : '' %> on <%= fmtDate(t.approved_at) %></td></tr>
+        <tr><th>Reason</th><td><%= t.rejection_reason || '(no reason given)' %></td></tr>
+      <% } %>
+      <% if (t.status === 'approved') { %>
+        <tr><th>Ordered</th><td><%= fmtDate(t.ordered_at) %></td></tr>
+      <% } %>
+    </tbody>
+  </table>
+
+  <% if (t.status === 'pending') { %>
+    <div class="d-flex gap-2 mt-3">
+      <form method="post" action="/admin/approvals/<%= t.id %>/approve">
+        <input type="hidden" name="next" value="/admin/transactions/requests">
+        <button class="btn btn-success">Approve</button>
+      </form>
+      <button type="button" class="btn btn-outline-danger" data-bs-toggle="collapse" data-bs-target="#reject-form">Reject</button>
+    </div>
+    <div class="collapse mt-3" id="reject-form">
+      <form method="post" action="/admin/approvals/<%= t.id %>/reject">
+        <input type="hidden" name="next" value="/admin/transactions/requests">
+        <label class="form-label small">Why is this being rejected?</label>
+        <textarea name="reason" class="form-control mb-2" rows="2" required></textarea>
+        <button class="btn btn-danger">Confirm Reject</button>
+      </form>
+    </div>
+  <% } else if (t.status === 'awaiting_order') { %>
+    <div class="d-flex gap-2 mt-3">
+      <form method="post" action="/admin/approvals/<%= t.id %>/confirm-ordered">
+        <input type="hidden" name="next" value="/admin/transactions/requests">
+        <button class="btn btn-success">Confirm Ordered</button>
+      </form>
+      <button type="button" class="btn btn-outline-danger" data-bs-toggle="collapse" data-bs-target="#reject-form">Reject Instead</button>
+    </div>
+    <div class="collapse mt-3" id="reject-form">
+      <form method="post" action="/admin/approvals/<%= t.id %>/reject">
+        <input type="hidden" name="next" value="/admin/transactions/requests">
+        <label class="form-label small">Why is this being rejected?</label>
+        <textarea name="reason" class="form-control mb-2" rows="2" required></textarea>
+        <button class="btn btn-danger">Confirm Reject</button>
+      </form>
+    </div>
+  <% } else if (t.status === 'approved') { %>
+    <p class="text-muted small mt-3">This is now a real transaction on the <a href="/admin/transactions">Transactions</a> tab.</p>
+  <% } %>
+</div>
+<%- include('partials/foot') %>

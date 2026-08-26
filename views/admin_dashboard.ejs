@@ -87,6 +87,7 @@ new Chart(document.getElementById('splitChart'), {
 <%- include('partials/head', { title: 'Dashboard' }) %>
 <style>
   .dashboard-title { font-size: 1.75rem; font-weight: 700; }
+  .stat-tile { min-height: 108px; display: flex; flex-direction: column; justify-content: center; }
   .stat-tile.accent-recurring { border-top: 3px solid #2a78d6; }
   .stat-tile.accent-onetime { border-top: 3px solid #eb6834; }
   .stat-tile.accent-event { border-top: 3px solid #1baf7a; }
@@ -110,32 +111,24 @@ new Chart(document.getElementById('splitChart'), {
 </div>
 
 <div class="row g-3 mb-4">
-  <div class="col-md-3">
+  <div class="col-md-2">
     <div class="stat-tile">
       <div class="label">Total Approved Spend</div>
-      <div class="value">$<%= fmtMoney(total_spend) %>
-        <% if (showTrend) { %>
-          <span class="small <%= trendUp ? 'text-danger' : 'text-success' %>" title="vs. same period last year">
-            <%= trendUp ? '▲' : '▼' %> <%= trendPct.toFixed(0) %>%
-          </span>
-        <% } %>
-      </div>
+      <div class="value">$<%= fmtMoney(total_spend) %></div>
+      <% if (showTrend) { %>
+        <span class="small <%= trendUp ? 'text-danger' : 'text-success' %>" title="vs. same period last year">
+          <%= trendUp ? '▲' : '▼' %> <%= trendPct.toFixed(0) %>% vs prior year
+        </span>
+      <% } %>
     </div>
   </div>
-  <div class="col-md-3"><div class="stat-tile accent-recurring"><div class="label">Recurring Spend</div><div class="value">$<%= fmtMoney(recurring_total) %></div></div></div>
-  <div class="col-md-3"><div class="stat-tile accent-onetime"><div class="label">One-Time Spend</div><div class="value">$<%= fmtMoney(onetime_total) %></div></div></div>
-  <div class="col-md-3"><div class="stat-tile accent-event"><div class="label">Event/Marketing Spend</div><div class="value">$<%= fmtMoney(event_marketing_total) %></div>
-    <div class="small text-muted">Events + Catering</div>
+  <div class="col-md-2"><div class="stat-tile accent-recurring"><div class="label">Recurring Spend</div><div class="value">$<%= fmtMoney(recurring_total) %></div></div></div>
+  <div class="col-md-2"><div class="stat-tile accent-onetime"><div class="label">One-Time Spend</div><div class="value">$<%= fmtMoney(onetime_total) %></div></div></div>
+  <div class="col-md-2"><div class="stat-tile accent-event"><div class="label">Event/Marketing</div><div class="value">$<%= fmtMoney(event_marketing_total) %></div></div></div>
+  <div class="col-md-2"><div class="stat-tile"><div class="label">Pending Approvals</div><div class="value"><%= pending_count %></div>
+    <% if (pending_count) { %><a href="/admin/transactions/requests" class="small">Review &rarr;</a><% } %>
   </div></div>
-</div>
-
-<div class="row g-3 mb-4">
-  <div class="col-md-3"><div class="stat-tile"><div class="label">Pending Approvals</div><div class="value"><%= pending_count %></div>
-    <% if (pending_count) { %><a href="/admin/approvals" class="small">View all &rarr;</a><% } %>
-  </div></div>
-  <div class="col-md-3"><div class="stat-tile"><div class="label">Potential Upcoming Spend</div><div class="value">$<%= fmtMoney(upcoming_spend) %></div>
-    <div class="small text-muted">Pending + approved-not-yet-ordered</div>
-  </div></div>
+  <div class="col-md-2"><div class="stat-tile"><div class="label">Potential Upcoming</div><div class="value">$<%= fmtMoney(upcoming_spend) %></div></div></div>
 </div>
 
 <div class="row g-3 chart-row mb-4">
@@ -170,40 +163,6 @@ new Chart(document.getElementById('splitChart'), {
       <% } else { %><div class="empty-chart-state">No spend recorded for this period yet</div><% } %>
     </div>
   </div>
-</div>
-
-<div class="card p-3 mb-4">
-  <h6>Pending Approvals</h6>
-  <% if (!pending_list || pending_list.length === 0) { %>
-    <p class="text-muted small mb-0">No pending approvals.</p>
-  <% } else { %>
-    <table class="table table-sm mb-0">
-      <thead><tr><th>Date</th><th>Employee</th><th>Category</th><th class="text-end">Amount</th><th></th></tr></thead>
-      <tbody>
-        <% pending_list.forEach(function (t) { %>
-        <tr>
-          <td><%= fmtDate(t.date) %></td>
-          <td><%= t.employee ? t.employee.name : (t.submitted_by ? t.submitted_by.name : '-') %></td>
-          <td><%= t.category ? t.category.name : 'Uncategorized' %></td>
-          <td class="text-end">$<%= fmt2(t.amount) %></td>
-          <td class="text-end">
-            <form method="post" action="/admin/approvals/<%= t.id %>/approve" class="d-inline">
-              <input type="hidden" name="next" value="/admin">
-              <button class="btn btn-success btn-sm">Approve</button>
-            </form>
-            <form method="post" action="/admin/approvals/<%= t.id %>/reject" class="d-inline">
-              <input type="hidden" name="next" value="/admin">
-              <button class="btn btn-outline-danger btn-sm">Reject</button>
-            </form>
-          </td>
-        </tr>
-        <% }) %>
-      </tbody>
-    </table>
-    <% if (pending_count > pending_list.length) { %>
-      <div class="small mt-2"><a href="/admin/approvals">View all (<%= pending_count %>) pending &rarr;</a></div>
-    <% } %>
-  <% } %>
 </div>
 
 <div class="card p-3 mb-4">

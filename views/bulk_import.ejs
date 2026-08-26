@@ -1,8 +1,5 @@
 <%- include('partials/head', { title: 'Bulk Import' }) %>
-<ul class="nav nav-tabs mb-3">
-  <li class="nav-item"><a class="nav-link" href="/admin/transactions">All Transactions</a></li>
-  <li class="nav-item"><a class="nav-link active" href="/admin/import">Import</a></li>
-</ul>
+<%- include('partials/transactions_nav', { active: 'import' }) %>
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h3 class="mb-0">Bulk Import — Spreadsheets, PDFs &amp; Images</h3>
   <a href="/admin/import/template.csv" class="btn btn-outline-secondary btn-sm">Download Import Template</a>

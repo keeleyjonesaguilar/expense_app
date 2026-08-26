@@ -27,7 +27,13 @@
 </head>
 <body>
 <%
-const isActive = (href) => (typeof currentPath !== 'undefined' && (currentPath === href || currentPath.startsWith(href + '/'))) ? ' active' : '';
+const pathMatches = (href) => typeof currentPath !== 'undefined' && (currentPath === href || currentPath.startsWith(href + '/'));
+const isActive = (href) => pathMatches(href) ? ' active' : '';
+// Transactions/Import/Item Requests/Reports are one hub, sub-tabbed under
+// /admin/transactions -- except Import and Reports, whose routes weren't
+// moved (see the Transactions-hub relocation), so the top nav's single
+// "Transactions" link needs to recognize all three URL prefixes as itself.
+const isTransactionsHubActive = ['/admin/transactions', '/admin/import', '/admin/reports'].some(pathMatches) ? ' active' : '';
 %>
 <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom mb-4">
   <div class="container-fluid px-4">
@@ -39,11 +45,9 @@ const isActive = (href) => (typeof currentPath !== 'undefined' && (currentPath =
       <ul class="navbar-nav me-auto">
         <% if (currentUser.is_authenticated) { %>
           <% if (currentUser.is_admin) { %>
-            <li class="nav-item"><a class="nav-link<%= isActive('/admin') %>" href="/admin">Dashboard</a></li>
-            <li class="nav-item"><a class="nav-link<%= isActive('/admin/approvals') %>" href="/admin/approvals">Approvals</a></li>
-            <li class="nav-item"><a class="nav-link<%= isActive('/admin/transactions') %>" href="/admin/transactions">Transactions</a></li>
+            <li class="nav-item"><a class="nav-link<%= currentPath === '/admin' ? ' active' : '' %>" href="/admin">Dashboard</a></li>
+            <li class="nav-item"><a class="nav-link<%= isTransactionsHubActive %>" href="/admin/transactions">Transactions</a></li>
             <li class="nav-item"><a class="nav-link<%= isActive('/admin/forecast') %>" href="/admin/forecast">Forecast</a></li>
-            <li class="nav-item"><a class="nav-link<%= isActive('/admin/reports') %>" href="/admin/reports">Reports</a></li>
             <li class="nav-item"><a class="nav-link<%= isActive('/marketing') %>" href="/marketing">Marketing &amp; ROI</a></li>
             <li class="nav-item"><a class="nav-link<%= isActive('/admin/settings') %>" href="/admin/settings">Settings</a></li>
           <% } else { %>
@@ -66,7 +70,7 @@ const isActive = (href) => (typeof currentPath !== 'undefined' && (currentPath =
   </div>
 </nav>
 
-<div class="container-fluid px-4" style="max-width:1400px;">
+<div class="container-fluid px-4 pb-5" style="max-width:1400px;">
   <% if (typeof messages !== 'undefined' && messages.length) { %>
     <% messages.forEach(function (m) { %>
       <div class="alert alert-<%= m[0] %> alert-dismissible fade show" role="alert">

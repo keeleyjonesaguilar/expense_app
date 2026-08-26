@@ -1,0 +1,49 @@
+<%- include('partials/head', { title: 'Item Requests' }) %>
+<%- include('partials/transactions_nav', { active: 'requests' }) %>
+<h3 class="mb-3">Item Requests</h3>
+<p class="text-muted small">Supply requests submitted through the public request form. Click any row to review, approve, reject, or confirm it's been ordered. Expense-report approvals live on the <a href="/admin/transactions?status=pending">All Transactions tab</a> instead.</p>
+
+<form method="get" class="row g-2 mb-3">
+  <div class="col-auto">
+    <select name="status" class="form-select form-select-sm">
+      <option value="open" <%= filters.status === 'open' ? 'selected' : '' %>>Open (pending + awaiting order)</option>
+      <option value="pending" <%= filters.status === 'pending' ? 'selected' : '' %>>Pending only</option>
+      <option value="awaiting_order" <%= filters.status === 'awaiting_order' ? 'selected' : '' %>>Awaiting order only</option>
+      <option value="approved" <%= filters.status === 'approved' ? 'selected' : '' %>>Ordered / Approved</option>
+      <option value="rejected" <%= filters.status === 'rejected' ? 'selected' : '' %>>Rejected</option>
+      <option value="any" <%= filters.status === 'any' ? 'selected' : '' %>>Any status</option>
+    </select>
+  </div>
+  <div class="col-auto">
+    <select name="category_id" class="form-select form-select-sm">
+      <option value="">All categories</option>
+      <% categories.forEach(function (c) { %><option value="<%= c.id %>" <%= String(filters.category_id) === String(c.id) ? 'selected' : '' %>><%= c.name %></option><% }) %>
+    </select>
+  </div>
+  <div class="col-auto"><button class="btn btn-outline-secondary btn-sm">Filter</button></div>
+</form>
+
+<div class="card">
+<table class="table table-sm mb-0">
+  <thead class="table-light"><tr><th>Date</th><th>Item</th><th>Category</th><th>Status</th></tr></thead>
+  <tbody>
+    <% if (requests.length === 0) { %>
+    <tr><td colspan="4" class="text-center text-muted py-4">No requests match those filters.</td></tr>
+    <% } %>
+    <% requests.forEach(function (t) { %>
+    <tr style="cursor:pointer" onclick="window.location='/admin/transactions/requests/<%= t.id %>'">
+      <td><%= fmtDate(t.date) %></td>
+      <td><%= t.description %></td>
+      <td><%= t.category ? t.category.name : 'Uncategorized' %></td>
+      <td>
+        <% if (t.status === 'pending') { %><span class="badge badge-pending">Pending</span>
+        <% } else if (t.status === 'awaiting_order') { %><span class="badge bg-info text-dark">Awaiting Order</span>
+        <% } else if (t.status === 'approved') { %><span class="badge badge-approved">Ordered</span>
+        <% } else { %><span class="badge badge-rejected">Rejected</span><% } %>
+      </td>
+    </tr>
+    <% }) %>
+  </tbody>
+</table>
+</div>
+<%- include('partials/foot') %>

@@ -1,8 +1,5 @@
 <%- include('partials/head', { title: 'Transactions' }) %>
-<ul class="nav nav-tabs mb-3">
-  <li class="nav-item"><a class="nav-link active" href="/admin/transactions">All Transactions</a></li>
-  <li class="nav-item"><a class="nav-link" href="/admin/import">Import</a></li>
-</ul>
+<%- include('partials/transactions_nav', { active: 'all' }) %>
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h3>All Transactions</h3>
   <div>
@@ -42,7 +39,7 @@
   </div>
   <div class="col-auto"><button class="btn btn-outline-secondary btn-sm">Filter</button></div>
 </form>
-<p class="text-muted small">Showing <strong>Approved</strong> transactions by default — pending and awaiting-order items live on the <a href="/admin/approvals">Approvals</a> page until they're confirmed.</p>
+<p class="text-muted small">Showing <strong>Approved</strong> transactions by default — filter to Status: Pending to review expense reports awaiting approval. Supply requests live on the <a href="/admin/transactions/requests">Item Requests</a> tab instead.</p>
 
 <div class="card">
 <table class="table table-sm mb-0">
@@ -76,8 +73,32 @@
         <% } else { %><span class="badge badge-rejected">Rejected</span><% } %>
       </td>
       <td><%= t.notes || '' %></td>
-      <td><button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#edit-<%= t.id %>">Edit</button></td>
+      <td class="text-nowrap">
+        <% if (t.status === 'pending' && t.source !== 'supply_request') { %>
+          <form method="post" action="/admin/approvals/<%= t.id %>/approve" class="d-inline">
+            <input type="hidden" name="next" value="/admin/transactions?status=pending">
+            <button class="btn btn-success btn-sm">Approve</button>
+          </form>
+          <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="collapse" data-bs-target="#reject-<%= t.id %>">Reject</button>
+        <% } else { %>
+          <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#edit-<%= t.id %>">Edit</button>
+        <% } %>
+      </td>
     </tr>
+    <% if (t.status === 'pending' && t.source !== 'supply_request') { %>
+    <tr class="collapse" id="reject-<%= t.id %>">
+      <td colspan="13" class="bg-light">
+        <form method="post" action="/admin/approvals/<%= t.id %>/reject" class="row g-2 align-items-end py-2">
+          <input type="hidden" name="next" value="/admin/transactions?status=pending">
+          <div class="col-md-8">
+            <label class="form-label small mb-0">Reason for rejection</label>
+            <textarea name="reason" class="form-control form-control-sm" rows="1" required></textarea>
+          </div>
+          <div class="col-md-2"><button class="btn btn-danger btn-sm w-100">Confirm Reject</button></div>
+        </form>
+      </td>
+    </tr>
+    <% } %>
     <tr class="collapse" id="edit-<%= t.id %>">
       <td colspan="13" class="bg-light">
         <form method="post" action="/admin/transactions/<%= t.id %>/update" class="row g-2 align-items-end py-2">
