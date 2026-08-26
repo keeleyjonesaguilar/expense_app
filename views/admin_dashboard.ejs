@@ -1,6 +1,5 @@
 <%
 const hasCategories = top_categories && top_categories.length > 0;
-const hasEmployees = by_employee && by_employee.length > 0;
 const hasMonths = months_sorted && months_sorted.length > 0;
 const hasSplit = (recurring_total + onetime_total + event_marketing_total) > 0;
 
@@ -36,19 +35,6 @@ new Chart(document.getElementById('catChart'), {
     plugins: { legend: { display: false } },
     scales: { x: { ticks: { callback: v => '$' + v.toLocaleString() } } }
   }
-});` : ''}
-
-${hasEmployees ? `
-new Chart(document.getElementById('empChart'), {
-  type: 'doughnut',
-  data: {
-    labels: ${JSON.stringify(by_employee.map((e) => e[0]))},
-    datasets: [{
-      data: ${JSON.stringify(by_employee.map((e) => e[1]))},
-      backgroundColor: PALETTE,
-    }]
-  },
-  options: { plugins: { legend: { position: 'right' } } }
 });` : ''}
 
 ${hasMonths ? `
@@ -110,8 +96,8 @@ new Chart(document.getElementById('splitChart'), {
   </form>
 </div>
 
-<div class="row g-3 mb-4">
-  <div class="col-md-2">
+<div class="row g-3 mb-3">
+  <div class="col-md-3">
     <div class="stat-tile">
       <div class="label">Total Approved Spend</div>
       <div class="value">$<%= fmtMoney(total_spend) %></div>
@@ -122,13 +108,28 @@ new Chart(document.getElementById('splitChart'), {
       <% } %>
     </div>
   </div>
-  <div class="col-md-2"><div class="stat-tile accent-recurring"><div class="label">Recurring Spend</div><div class="value">$<%= fmtMoney(recurring_total) %></div></div></div>
-  <div class="col-md-2"><div class="stat-tile accent-onetime"><div class="label">One-Time Spend</div><div class="value">$<%= fmtMoney(onetime_total) %></div></div></div>
-  <div class="col-md-2"><div class="stat-tile accent-event"><div class="label">Event/Marketing</div><div class="value">$<%= fmtMoney(event_marketing_total) %></div></div></div>
-  <div class="col-md-2"><div class="stat-tile"><div class="label">Pending Approvals</div><div class="value"><%= pending_count %></div>
+  <div class="col-md-3"><div class="stat-tile accent-recurring"><div class="label">Recurring Spend</div><div class="value">$<%= fmtMoney(recurring_total) %></div></div></div>
+  <div class="col-md-3"><div class="stat-tile accent-onetime"><div class="label">One-Time Spend</div><div class="value">$<%= fmtMoney(onetime_total) %></div></div></div>
+  <div class="col-md-3"><div class="stat-tile accent-event"><div class="label">Event/Marketing</div><div class="value">$<%= fmtMoney(event_marketing_total) %></div></div></div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-4"><div class="stat-tile"><div class="label">Pending Approvals</div><div class="value"><%= pending_count %></div>
     <% if (pending_count) { %><a href="/admin/transactions/requests" class="small">Review &rarr;</a><% } %>
   </div></div>
-  <div class="col-md-2"><div class="stat-tile"><div class="label">Potential Upcoming</div><div class="value">$<%= fmtMoney(upcoming_spend) %></div></div></div>
+  <div class="col-md-4"><div class="stat-tile"><div class="label">Potential Upcoming</div><div class="value">$<%= fmtMoney(upcoming_spend) %></div></div></div>
+  <div class="col-md-4">
+    <div class="stat-tile">
+      <div class="label">Avg Spend / Employee</div>
+      <% if (avg_spend_per_employee != null) { %>
+        <div class="value">$<%= fmtMoney(avg_spend_per_employee) %></div>
+        <div class="small text-muted">Excludes Event/Marketing spend</div>
+      <% } else { %>
+        <div class="value text-muted" style="font-size:1.1rem;">—</div>
+        <a href="/admin/settings" class="small">Set headcount in Settings</a>
+      <% } %>
+    </div>
+  </div>
 </div>
 
 <div class="row g-3 chart-row mb-4">
@@ -149,17 +150,10 @@ new Chart(document.getElementById('splitChart'), {
 </div>
 
 <div class="row g-3 chart-row mb-4">
-  <div class="col-md-6">
-    <div class="card p-3">
-      <h6>Spending by Employee</h6>
-      <% if (hasEmployees) { %><canvas id="empChart" height="220"></canvas>
-      <% } else { %><div class="empty-chart-state">No spend recorded for this period yet</div><% } %>
-    </div>
-  </div>
-  <div class="col-md-6">
+  <div class="col-md-12">
     <div class="card p-3">
       <h6>Monthly Trend</h6>
-      <% if (hasMonths) { %><canvas id="monthChart" height="220"></canvas>
+      <% if (hasMonths) { %><canvas id="monthChart" height="120"></canvas>
       <% } else { %><div class="empty-chart-state">No spend recorded for this period yet</div><% } %>
     </div>
   </div>

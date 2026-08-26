@@ -69,6 +69,18 @@ router.get('/admin', (req, res) => {
     .prepare('SELECT COALESCE(SUM(amount), 0) AS total FROM transactions WHERE status IN (?, ?)')
     .get(STATUS_PENDING, STATUS_AWAITING_ORDER).total;
 
+  // Average spend per employee -- deliberately excludes Event/Marketing
+  // spend (Events, Catering) since that's reviewed per-event, not as a
+  // per-employee cost; same exclusion computeSpendSummary already applies
+  // when it splits out eventMarketingTotal. Not shown as a per-employee
+  // breakdown (spend isn't tracked to a specific person reliably enough for
+  // that) -- just the one aggregate figure, driven by the headcount set in
+  // Settings -> General.
+  const headcountRaw = db.getSetting('employee_count', '');
+  const headcount = headcountRaw ? parseInt(headcountRaw, 10) : 0;
+  const avgSpendPerEmployee =
+    headcount > 0 ? (summary.recurringTotal + summary.onetimeTotal) / headcount : null;
+
   res.render('admin_dashboard', {
     title: 'Dashboard',
     available_years: availableYears,
@@ -79,9 +91,9 @@ router.get('/admin', (req, res) => {
     event_marketing_total: summary.eventMarketingTotal,
     pending_count: pendingCount,
     upcoming_spend: upcomingSpend,
+    avg_spend_per_employee: avgSpendPerEmployee,
     top_categories: summary.topCategories.slice(0, 10),
     top_vendors: summary.topVendors.slice(0, 10),
-    by_employee: summary.byEmployeeSorted,
     months_sorted: summary.monthsSorted,
     year_over_year: summary.yearOverYear,
     no_prior_year_data: summary.noPriorYearData,
