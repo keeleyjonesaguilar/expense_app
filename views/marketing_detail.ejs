@@ -3,6 +3,24 @@
 <p class="text-muted"><%= ev.event_type.charAt(0).toUpperCase() + ev.event_type.slice(1) %> — <%= fmtDate(ev.date) %> <% if (ev.location) { %>— <%= ev.location %><% } %></p>
 <% if (ev.notes) { %><p><%= ev.notes %></p><% } %>
 
+<div class="card p-3 mb-4">
+  <div class="d-flex justify-content-between align-items-center">
+    <div>
+      <strong>Attendees:</strong>
+      <% if (ev.attendees.length === 0) { %><span class="text-muted">none logged</span>
+      <% } else { %><% ev.attendees.forEach(function (a) { %><span class="badge bg-secondary me-1"><%= a.name %></span><% }) %><% } %>
+    </div>
+    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#attendee-form">Edit</button>
+  </div>
+  <div class="collapse mt-2" id="attendee-form">
+    <form method="post" action="/marketing/<%= ev.id %>/attendees">
+      <% var attendeeIds = ev.attendees.map(function (a) { return a.id; }); %>
+      <%- include('partials/employee_picker', { id: 'event-attendees-' + ev.id, fieldName: 'attendee_id', employees: employees, selected_ids: attendeeIds }) %>
+      <div class="mt-2"><button class="btn btn-primary btn-sm">Save Attendees</button></div>
+    </form>
+  </div>
+</div>
+
 <div class="row g-3 mb-4">
   <div class="col-md-3"><div class="stat-tile"><div class="label">Cost</div><div class="value">$<%= fmtMoney(ev.cost || 0) %></div></div></div>
   <div class="col-md-3"><div class="stat-tile"><div class="label">Connections Made</div><div class="value"><%= ev.connections.length %></div></div></div>
@@ -46,8 +64,13 @@
   </div>
 
   <div class="col-md-6">
-    <div class="card p-3">
-      <h6>Outcomes</h6>
+    <div class="card p-3 border-primary">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <h6 class="mb-1">Step 2: Log the Return</h6>
+          <p class="text-muted small mb-2">Once this event has actually happened, log what it returned -- a new client, a signed deal, a referral -- so its ROI reflects reality, not just cost. Log as many as apply; each attendee's personal ROI gets an even share of the total.</p>
+        </div>
+      </div>
       <table class="table table-sm">
         <thead><tr><th>Description</th><th>Type</th><th class="text-end">Value</th></tr></thead>
         <tbody>
@@ -59,7 +82,7 @@
         <% }) %>
         </tbody>
       </table>
-      <button class="btn btn-outline-primary btn-sm" data-bs-toggle="collapse" data-bs-target="#outcome-form">+ Log Outcome</button>
+      <button class="btn btn-primary" data-bs-toggle="collapse" data-bs-target="#outcome-form">+ Log a Return</button>
       <div class="collapse mt-2" id="outcome-form">
         <form method="post" action="/marketing/<%= ev.id %>/outcomes/new">
           <div class="mb-2"><input type="text" name="description" class="form-control form-control-sm" placeholder="e.g. Signed contract with ABC Corp" required></div>

@@ -1,46 +1,44 @@
-// Ported from models.py -- the established spending categories, kept intact
-// per the company's existing budget structure. "kind" drives the forecast's
-// one-time-growth special case; "recurrence_basis" is the default budgeting
-// cadence for the category (editable per-category in Settings) -- one of
+// The company's 4 top-level spend buckets (redesigned 2026-09-16 per
+// leadership review -- replaces the old ~38-category flat list). "kind"
+// drives the Spend by Type report's fixed/discretionary split;
+// "recurrence_basis" is the default budgeting cadence -- one of
 // RECURRENCE_BASIS_OPTIONS below.
+// Deliberately just 4, closed set: unlike the old categories, the app does
+// not let the AI classifier invent a 5th -- every expense fits one of
+// these, with TAGS (see ESTABLISHED_TAGS) carrying the finer-grained detail
+// that categories used to carry.
 const ESTABLISHED_CATEGORIES = [
-  ['Beverages', 'semi-variable', 'recurring-monthly'],
-  ['Binding Supplies', 'fixed', 'recurring-monthly'],
-  ['Books & Training Materials', 'semi-variable', 'recurring-quarterly'],
-  ['Cleaning Supplies', 'semi-variable', 'recurring-monthly'],
-  ['Coffee Supplies', 'semi-variable', 'recurring-monthly'],
-  ['Computer Accessories', 'variable', 'recurring-monthly'],
-  ['Computer Equipment', 'one-time-growth', 'one-time'],
-  ['Conference Room Equipment', 'one-time-growth', 'one-time'],
-  ['Electronics & IT Equipment', 'variable', 'recurring-monthly'],
-  ['Event Supplies', 'semi-variable', 'recurring-quarterly'],
-  ['First Aid & Medical Supplies', 'semi-variable', 'recurring-quarterly'],
-  ['Gift Cards', 'fixed', 'recurring-quarterly'],
-  ['Maintenance / Hardware Supplies', 'fixed', 'recurring-monthly'],
-  ['Kitchen Supplies', 'semi-variable', 'recurring-monthly'],
-  ['Label Supplies', 'fixed', 'recurring-quarterly'],
-  ['Office Decor', 'one-time-growth', 'one-time'],
-  ['Office Equipment', 'one-time-growth', 'one-time'],
-  ['Office Furniture', 'one-time-growth', 'one-time'],
-  ['Office Organization', 'one-time-growth', 'one-time'],
-  ['Office Snacks & Candy', 'semi-variable', 'recurring-monthly'],
-  ['Office Supplies', 'semi-variable', 'recurring-monthly'],
-  ['Paper Products', 'semi-variable', 'recurring-monthly'],
-  ['Pest Control', 'fixed', 'recurring-monthly'],
-  ['Printer Supplies', 'semi-variable', 'recurring-quarterly'],
-  ['Printing Services', 'semi-variable', 'recurring-quarterly'],
-  ['Safety Supplies', 'variable', 'recurring-quarterly'],
-  ['Shipping Supplies', 'variable', 'recurring-monthly'],
-  ['Vehicle Supplies', 'fixed', 'recurring-quarterly'],
-  ['Services', 'fixed', 'recurring-monthly'],
-  ['Subscriptions', 'fixed', 'recurring-monthly'],
-  ['Events', 'discretionary', 'recurring-yearly'],
-  ['Catering', 'semi-variable', 'recurring-quarterly'],
-  ['Personal Development', 'variable', 'recurring-yearly'],
-  ['Food & Meals', 'semi-variable', 'recurring-monthly'],
-  ['Lunch & Learn', 'semi-variable', 'recurring-monthly'],
-  ['Holiday Party', 'discretionary', 'recurring-yearly'],
-  ['Miscellaneous', 'semi-variable', 'recurring-monthly'],
+  ['Office Expenses', 'semi-variable', 'recurring-monthly'],
+  ['Professional Development', 'variable', 'recurring-yearly'],
+  ['Business Development', 'discretionary', 'recurring-quarterly'],
+  ['Team Engagement/Employee Retention', 'discretionary', 'recurring-quarterly'],
+];
+
+// Tags: the finer-grained label within a category (a transaction can carry
+// more than one). Purely descriptive -- no kind/cadence of their own, since
+// a transaction's budgeting pattern is decided at the category level and a
+// multi-tag transaction can't cleanly have more than one. [tag name,
+// category name it belongs to].
+const ESTABLISHED_TAGS = [
+  ['Software & Tech', 'Office Expenses'],
+  ['Consumables', 'Office Expenses'],
+  ['Supplies', 'Office Expenses'],
+  ['PPE', 'Office Expenses'],
+
+  ['Courses', 'Professional Development'],
+  ['Renewals', 'Professional Development'],
+
+  ['Memberships', 'Business Development'],
+  ['Sponsorships', 'Business Development'],
+  ['Events', 'Business Development'],
+  ['Conferences', 'Business Development'],
+  ['Speaking Engagements', 'Business Development'],
+  ['Gifts & Meals', 'Business Development'],
+
+  ['L&L', 'Team Engagement/Employee Retention'],
+  ['Holiday Party', 'Team Engagement/Employee Retention'],
+  ['Employee Gifts', 'Team Engagement/Employee Retention'],
+  ['Summer Social', 'Team Engagement/Employee Retention'],
 ];
 
 // The per-category "default basis" choices offered in Settings.
@@ -127,6 +125,7 @@ const REQUIRABLE_FIELDS = ['amount', 'category', 'vendor', 'quantity', 'receipt'
 
 module.exports = {
   ESTABLISHED_CATEGORIES,
+  ESTABLISHED_TAGS,
   RECURRENCE_BASIS_OPTIONS,
   STATUS_PENDING,
   STATUS_APPROVED,

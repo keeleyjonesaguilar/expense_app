@@ -45,19 +45,20 @@
 <table class="table table-sm mb-0">
   <thead class="table-light">
     <tr>
-      <th>Date</th><th>Category</th><th>Vendor</th><th>Employee</th><th>Description</th>
+      <th>Date</th><th>Category</th><th>Tags</th><th>Vendor</th><th>Employee</th><th>Description</th>
       <th class="text-end">Qty</th><th class="text-end">Price/Item</th><th class="text-end">Total</th>
       <th>Link</th><th>One-Time</th><th>Status</th><th>Notes</th><th></th>
     </tr>
   </thead>
   <tbody>
     <% if (txs.length === 0) { %>
-    <tr><td colspan="13" class="text-center text-muted py-4">No transactions match those filters.</td></tr>
+    <tr><td colspan="14" class="text-center text-muted py-4">No transactions match those filters.</td></tr>
     <% } %>
     <% txs.forEach(function (t) { %>
     <tr>
       <td><%= fmtDate(t.date) %></td>
       <td><%= t.category ? t.category.name : 'Uncategorized' %></td>
+      <td><% (t.tags || []).forEach(function (tn) { %><span class="badge bg-secondary me-1"><%= tn %></span><% }) %></td>
       <td><%= t.vendor ? t.vendor.name : '' %></td>
       <td><%= t.employee ? t.employee.name : (t.submitted_by ? t.submitted_by.name : '-') %></td>
       <td><%= t.description %></td>
@@ -87,7 +88,7 @@
     </tr>
     <% if (t.status === 'pending' && t.source !== 'supply_request') { %>
     <tr class="collapse" id="reject-<%= t.id %>">
-      <td colspan="13" class="bg-light">
+      <td colspan="14" class="bg-light">
         <form method="post" action="/admin/approvals/<%= t.id %>/reject" class="row g-2 align-items-end py-2">
           <input type="hidden" name="next" value="/admin/transactions?status=pending">
           <div class="col-md-8">
@@ -100,13 +101,25 @@
     </tr>
     <% } %>
     <tr class="collapse" id="edit-<%= t.id %>">
-      <td colspan="13" class="bg-light">
+      <td colspan="14" class="bg-light">
         <form method="post" action="/admin/transactions/<%= t.id %>/update" class="row g-2 align-items-end py-2">
+          <input type="hidden" name="next" value="<%= currentUrl %>">
+          <input type="hidden" name="tags_present" value="1">
           <div class="col-auto">
             <label class="form-label small mb-0">Category</label>
             <select name="category_id" class="form-select form-select-sm">
               <% categories.forEach(function (c) { %><option value="<%= c.id %>" <%= t.category_id === c.id ? 'selected' : '' %>><%= c.name %></option><% }) %>
             </select>
+          </div>
+          <div class="col-12">
+            <label class="form-label small mb-0 d-block">Tags</label>
+            <% tags.forEach(function (tg) { %>
+              <div class="form-check form-check-inline">
+                <input type="checkbox" class="form-check-input" name="tag" value="<%= tg.name %>" id="txtag-<%= t.id %>-<%= tg.id %>"
+                  <%= (t.tags || []).includes(tg.name) ? 'checked' : '' %>>
+                <label class="form-check-label small" for="txtag-<%= t.id %>-<%= tg.id %>"><%= tg.name %> <span class="text-muted">(<%= tg.category_name %>)</span></label>
+              </div>
+            <% }) %>
           </div>
           <div class="col-auto">
             <label class="form-label small mb-0">Vendor</label>

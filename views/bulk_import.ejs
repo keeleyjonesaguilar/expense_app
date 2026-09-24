@@ -1,12 +1,15 @@
 <%- include('partials/head', { title: 'Bulk Import' }) %>
 <%- include('partials/transactions_nav', { active: 'import' }) %>
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <h3 class="mb-0">Bulk Import — Spreadsheets, PDFs &amp; Images</h3>
+  <h3 class="mb-0">Bulk Import — Spreadsheets, PDFs &amp; Images <% if (ai_enabled) { %><span class="badge bg-primary align-middle">AI-Powered</span><% } %></h3>
   <a href="/admin/import/template.csv" class="btn btn-outline-secondary btn-sm">Download Import Template</a>
 </div>
 <div class="card p-4 mb-4">
   <p class="text-muted">Upload a spreadsheet export (CSV/XLSX), or a PDF/image statement or receipt.
-  Every row gets a suggested category you can correct before anything is saved.</p>
+  <% if (ai_enabled) { %>
+    A local AI model reads receipt/PDF uploads in full — vendor, date, amount, category, and tag(s), proposing a new tag within the matched category when nothing existing fits, and flagging likely duplicate re-imports.
+  <% } %>
+  Every row gets a suggested category and tag(s) you can correct, and nothing is saved until you review it below and click Commit.</p>
   <form method="post" action="/admin/import" enctype="multipart/form-data" class="row g-2">
     <div class="col-md-8"><input type="file" name="file" class="form-control" accept=".csv,.xlsx,.xls,.pdf,.png,.jpg,.jpeg" required></div>
     <div class="col-md-4"><button class="btn btn-primary w-100">Upload &amp; Extract</button></div>
@@ -68,19 +71,52 @@
     <h6>Review before importing (<%= preview_rows.length %> rows)</h6>
     <div style="overflow-x:auto">
     <table class="table table-sm">
-      <thead><tr><th>Skip</th><th>Date</th><th>Qty</th><th>Price/Item</th><th>Total Price</th><th>Category</th><th>Vendor</th><th>Employee</th><th>Description</th><th>Link</th><th>Notes</th><th>One-Time</th></tr></thead>
+      <thead><tr><th>Skip</th><th>Date</th><th>Qty</th><th>Price/Item</th><th>Total Price</th><th>Category</th><th>Tags</th><th>Vendor</th><th>Employee</th><th>Description</th><th>Link</th><th>Notes</th><th>One-Time</th></tr></thead>
       <tbody>
       <% preview_rows.forEach(function (row, i) { %>
-        <tr>
-          <td><input type="checkbox" name="skip_<%= i %>"></td>
+        <tr class="<%= row.duplicate_of && row.duplicate_of.length ? 'table-warning' : '' %>">
+          <td>
+            <input type="checkbox" name="skip_<%= i %>" <%= row.duplicate_of && row.duplicate_of.length ? 'checked' : '' %>>
+            <% if (row.duplicate_of && row.duplicate_of.length) { %>
+              <div class="small text-danger mt-1" style="max-width:110px">
+                Possible duplicate — an existing transaction on <%= row.date %> has the same item text (#<%= row.duplicate_of.map(function(d){return d.id;}).join(', #') %>). Pre-checked to skip; uncheck to import anyway.
+              </div>
+            <% } %>
+          </td>
           <td><input type="date" name="date_<%= i %>" value="<%= row.date || '' %>" class="form-control form-control-sm"></td>
           <td><input type="number" step="any" name="quantity_<%= i %>" value="<%= row.quantity != null ? row.quantity : '' %>" class="form-control form-control-sm" style="width:70px"></td>
           <td><input type="number" step="0.01" name="unit_price_<%= i %>" value="<%= row.unit_price != null ? row.unit_price : '' %>" class="form-control form-control-sm" style="width:90px"></td>
           <td><input type="number" step="0.01" name="amount_<%= i %>" value="<%= row.amount != null ? row.amount : '' %>" class="form-control form-control-sm" style="width:100px"></td>
+          <%
+            const categoryMatches = categories.some(function (c) { return c.name === row.suggested_category; });
+            const rowTags = row.tags || [];
+          %>
           <td>
-            <select name="category_<%= i %>" class="form-select form-select-sm">
+            <select name="category_<%= i %>" class="form-select form-select-sm <%= !categoryMatches ? 'border-danger' : '' %>">
+              <% if (!categoryMatches) { %><option value="" selected disabled>&#9888; Unmatched: "<%= row.suggested_category %>" -- choose one</option><% } %>
               <% categories.forEach(function (c) { %><option value="<%= c.name %>" <%= row.suggested_category === c.name ? 'selected' : '' %>><%= c.name %></option><% }) %>
             </select>
+            <% if (row.suggested_event_type) { %>
+              <div class="small text-muted mt-1" style="max-width:220px">
+                AI flags this as <strong><%= row.suggested_event_type %></strong>-type spend.
+                <a target="_blank" href="/marketing/new?prefill_name=<%= encodeURIComponent(row.vendor || row.description || '') %>&prefill_type=<%= encodeURIComponent(row.suggested_event_type) %>&prefill_cost=<%= encodeURIComponent(row.amount || '') %>&prefill_date=<%= encodeURIComponent(row.date || '') %>">Log it in Marketing &amp; ROI &rarr;</a>
+              </div>
+            <% } %>
+          </td>
+          <td style="min-width:160px">
+            <% tags.forEach(function (t) { %>
+              <div class="form-check form-check-sm">
+                <input type="checkbox" class="form-check-input" name="tag_<%= i %>" value="<%= t.name %>" id="tag-<%= i %>-<%= t.id %>"
+                  <%= rowTags.some(function (rt) { return rt.name === t.name; }) ? 'checked' : '' %>>
+                <label class="form-check-label small" for="tag-<%= i %>-<%= t.id %>"><%= t.name %> <span class="text-muted">(<%= t.category_name %>)</span></label>
+              </div>
+            <% }) %>
+            <% rowTags.filter(function (rt) { return rt.is_new; }).forEach(function (rt) { %>
+              <div class="form-check form-check-sm">
+                <input type="checkbox" class="form-check-input" name="tag_<%= i %>" value="<%= rt.name %>" checked id="newtag-<%= i %>-<%= rt.name %>">
+                <label class="form-check-label small" for="newtag-<%= i %>-<%= rt.name %>"><%= rt.name %> <span class="badge bg-primary">new</span></label>
+              </div>
+            <% }) %>
           </td>
           <td><input type="text" name="vendor_<%= i %>" value="<%= row.vendor || '' %>" class="form-control form-control-sm" style="width:120px"></td>
           <td>

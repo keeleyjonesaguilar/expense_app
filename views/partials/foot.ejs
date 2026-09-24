@@ -1,5 +1,10 @@
 </div>
 
+<!-- Shared "type DELETE/DEACTIVATE to confirm" modal -- one instance per
+     page, reused by any destructive/deactivating button via
+     openConfirmModal({...}). See partials/confirm_modal.ejs. -->
+<%- include('confirm_modal') %>
+
 <script src="/static/vendor/bootstrap.bundle.min.js"></script>
 <%- typeof extraScripts !== 'undefined' ? extraScripts : '' %>
 </body>

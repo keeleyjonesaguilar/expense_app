@@ -2,64 +2,84 @@
 <%- include('partials/settings_nav', { active: 'categories' }) %>
 
 <div class="card p-3 mb-4">
-  <h6>Add Category</h6>
-  <form method="post" action="/admin/settings/categories" class="row g-2 align-items-end">
-    <div class="col-md-3"><label class="form-label small mb-0">Name</label><input type="text" name="name" class="form-control form-control-sm" required></div>
-    <div class="col-md-2">
-      <label class="form-label small mb-0">Kind</label>
-      <select name="kind" class="form-select form-select-sm">
-        <option value="fixed">Fixed</option>
-        <option value="variable">Variable</option>
-        <option value="semi-variable" selected>Semi-Variable</option>
-        <option value="one-time-growth">One-Time / Growth</option>
-        <option value="discretionary">Discretionary</option>
+  <h6>The 4 Categories</h6>
+  <p class="text-muted small mb-2">Deliberately a fixed set of 4 -- names aren't editable here since they're referenced throughout the AI classifier and the Marketing &amp; ROI event linking. Kind and cadence (used for the Spend by Type report) can be tuned.</p>
+  <table class="table table-sm mb-0">
+    <thead class="table-light"><tr><th>Name</th><th>Kind</th><th>Default Basis</th><th></th></tr></thead>
+    <tbody>
+      <% categories.forEach(function (c) { %>
+      <tr>
+        <td><%= c.name %></td>
+        <td><%= c.kind %></td>
+        <td><%= (recurrence_options.find(function (o) { return o[0] === c.recurrence_basis; }) || [null, c.recurrence_basis])[1] %></td>
+        <td><button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#edit-cat-<%= c.id %>">Edit</button></td>
+      </tr>
+      <tr class="collapse" id="edit-cat-<%= c.id %>">
+        <td colspan="4">
+          <form method="post" action="/admin/settings/categories/<%= c.id %>/update" class="row g-2 align-items-end py-2">
+            <div class="col-md-4">
+              <label class="form-label small mb-0">Kind</label>
+              <select name="kind" class="form-select form-select-sm">
+                <% ['fixed','variable','semi-variable','one-time-growth','discretionary'].forEach(function (k) { %>
+                  <option value="<%= k %>" <%= c.kind === k ? 'selected' : '' %>><%= k %></option>
+                <% }) %>
+              </select>
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small mb-0">Default Basis</label>
+              <select name="recurrence_basis" class="form-select form-select-sm">
+                <% recurrence_options.forEach(function (o) { %><option value="<%= o[0] %>" <%= c.recurrence_basis === o[0] ? 'selected' : '' %>><%= o[1] %></option><% }) %>
+              </select>
+            </div>
+            <div class="col-md-2"><button type="submit" class="btn btn-primary btn-sm w-100">Save</button></div>
+          </form>
+        </td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+
+<div class="card p-3 mb-4">
+  <h6>Add Tag</h6>
+  <p class="text-muted small mb-2">Tags are the finer-grained label within a category -- what actually shows up in the review screen and drives the Spend by Tag report.</p>
+  <form method="post" action="/admin/settings/tags" class="row g-2 align-items-end">
+    <div class="col-md-4"><label class="form-label small mb-0">Tag Name</label><input type="text" name="name" class="form-control form-control-sm" value="<%= prefill_tag_name %>" required></div>
+    <div class="col-md-4">
+      <label class="form-label small mb-0">Category</label>
+      <select name="category_id" class="form-select form-select-sm">
+        <% categories.forEach(function (c) { %><option value="<%= c.id %>" <%= String(prefill_category) === String(c.id) || prefill_category === c.name ? 'selected' : '' %>><%= c.name %></option><% }) %>
       </select>
-    </div>
-    <div class="col-md-2">
-      <label class="form-label small mb-0">Default Basis</label>
-      <select name="recurrence_basis" class="form-select form-select-sm">
-        <% recurrence_options.forEach(function (o) { %><option value="<%= o[0] %>" <%= o[0] === 'recurring-monthly' ? 'selected' : '' %>><%= o[1] %></option><% }) %>
-      </select>
-    </div>
-    <div class="col-md-3">
-      <label class="form-label small mb-0">Why is this being added? *</label>
-      <input type="text" name="added_reason" class="form-control form-control-sm" placeholder="e.g. requested by ops for X" required>
     </div>
     <div class="col-md-2"><button class="btn btn-primary btn-sm w-100">Add</button></div>
   </form>
-  <p class="text-muted small mt-2 mb-0">A reason is required for new categories so the list only grows on purpose -- it's shown as a tooltip on the category name below.</p>
 </div>
 
 <div class="card">
 <table class="table table-sm mb-0">
-  <thead class="table-light"><tr><th>Name</th><th>Kind</th><th>Default Basis</th><th></th></tr></thead>
+  <thead class="table-light"><tr><th>Tag</th><th>Category</th><th>In Use</th><th colspan="2"></th></tr></thead>
   <tbody>
-    <% categories.forEach(function (c) { %>
+    <% tags.forEach(function (t) { %>
     <tr>
-      <td><%= c.name %><% if (c.added_reason) { %> <span class="text-muted" style="cursor:help" title="<%= c.added_reason %>">&#9432;</span><% } %></td>
-      <td><%= c.kind %></td>
-      <td><%= (recurrence_options.find(function (o) { return o[0] === c.recurrence_basis; }) || [null, c.recurrence_basis])[1] %></td>
-      <td><button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#edit-cat-<%= c.id %>">Edit</button></td>
+      <td><%= t.name %></td>
+      <td><%= t.category_name %></td>
+      <td><%= t.tx_count %></td>
+      <td><button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#edit-tag-<%= t.id %>">Edit</button></td>
+      <td>
+        <button type="button" class="btn btn-outline-danger btn-sm" <%- t.tx_count > 0 ? 'disabled title="In use -- can\'t delete"' : `onclick="openConfirmModal({action:'/admin/settings/tags/${t.id}/delete', title:'Delete Tag', body:'Permanently delete the tag ${t.name.replace(/'/g, "\\'")}.', word:'delete', submitLabel:'Delete Tag'})"` %>>Delete</button>
+      </td>
     </tr>
-    <tr class="collapse" id="edit-cat-<%= c.id %>">
-      <td colspan="4">
-        <form method="post" action="/admin/settings/categories/<%= c.id %>/update" class="row g-2 align-items-end py-2">
+    <tr class="collapse" id="edit-tag-<%= t.id %>">
+      <td colspan="5">
+        <form method="post" action="/admin/settings/tags/<%= t.id %>/update" class="row g-2 align-items-end py-2">
           <div class="col-md-4">
             <label class="form-label small mb-0">Name</label>
-            <input type="text" name="name" value="<%= c.name %>" class="form-control form-control-sm">
+            <input type="text" name="name" value="<%= t.name %>" class="form-control form-control-sm">
           </div>
-          <div class="col-md-3">
-            <label class="form-label small mb-0">Kind</label>
-            <select name="kind" class="form-select form-select-sm">
-              <% ['fixed','variable','semi-variable','one-time-growth','discretionary'].forEach(function (k) { %>
-                <option value="<%= k %>" <%= c.kind === k ? 'selected' : '' %>><%= k %></option>
-              <% }) %>
-            </select>
-          </div>
-          <div class="col-md-3">
-            <label class="form-label small mb-0">Default Basis</label>
-            <select name="recurrence_basis" class="form-select form-select-sm">
-              <% recurrence_options.forEach(function (o) { %><option value="<%= o[0] %>" <%= c.recurrence_basis === o[0] ? 'selected' : '' %>><%= o[1] %></option><% }) %>
+          <div class="col-md-4">
+            <label class="form-label small mb-0">Category</label>
+            <select name="category_id" class="form-select form-select-sm">
+              <% categories.forEach(function (c) { %><option value="<%= c.id %>" <%= t.category_id === c.id ? 'selected' : '' %>><%= c.name %></option><% }) %>
             </select>
           </div>
           <div class="col-md-2"><button type="submit" class="btn btn-primary btn-sm w-100">Save</button></div>

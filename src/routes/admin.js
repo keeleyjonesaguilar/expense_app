@@ -10,16 +10,53 @@ const {
   SOURCE_SUPPLY_REQUEST,
 } = require('../constants');
 const { toCsv } = require('../lib/csv');
-const { TX_JOIN_SELECT, hydrate, computeSpendSummary } = require('../lib/reportData');
+const { TX_JOIN_SELECT, hydrate, computeSpendSummary, computeSpendByTag } = require('../lib/reportData');
 
 const router = express.Router();
 router.use(requireAuth, requireAdmin);
 
 const listCategories = db.prepare('SELECT * FROM categories ORDER BY name');
-const listEmployees = db.prepare('SELECT * FROM users ORDER BY name');
+const listTags = db.prepare(
+  'SELECT tags.id, tags.name, c.name AS category_name FROM tags JOIN categories c ON c.id = tags.category_id ORDER BY c.name, tags.name'
+);
+const findTagByName = db.prepare('SELECT * FROM tags WHERE name = ?');
+const insertTag = db.prepare('INSERT INTO tags (name, category_id) VALUES (?, ?)');
+const clearTxTags = db.prepare('DELETE FROM transaction_tags WHERE transaction_id = ?');
+const linkTxTag = db.prepare('INSERT OR IGNORE INTO transaction_tags (transaction_id, tag_id) VALUES (?, ?)');
+function findOrCreateTag(name, categoryId) {
+  if (!name) return null;
+  let tag = findTagByName.get(name);
+  if (!tag) {
+    const info = insertTag.run(name, categoryId);
+    tag = { id: info.lastInsertRowid, name, category_id: categoryId };
+  }
+  return tag;
+}
+const listEmployees = db.prepare('SELECT * FROM employees WHERE active = 1 ORDER BY name');
 const findVendorByName = db.prepare('SELECT * FROM vendors WHERE name = ?');
 const insertVendor = db.prepare('INSERT INTO vendors (name) VALUES (?)');
 const getTxById = db.prepare('SELECT * FROM transactions WHERE id = ?');
+
+// Tags are many-per-transaction, so they don't fit cleanly into
+// TX_JOIN_SELECT's one-row-per-transaction join -- load them separately and
+// attach as t.tags (an array of names). Fine at this scale (a handful of
+// tags per transaction, not hundreds).
+function attachTags(txs) {
+  if (!txs.length) return txs;
+  const ids = txs.map((t) => t.id);
+  const tagRows = db
+    .prepare(
+      `SELECT tt.transaction_id, tg.name FROM transaction_tags tt JOIN tags tg ON tg.id = tt.tag_id WHERE tt.transaction_id IN (${ids.map(() => '?').join(',')})`
+    )
+    .all(...ids);
+  const tagsByTx = new Map();
+  for (const row of tagRows) {
+    if (!tagsByTx.has(row.transaction_id)) tagsByTx.set(row.transaction_id, []);
+    tagsByTx.get(row.transaction_id).push(row.name);
+  }
+  for (const t of txs) t.tags = tagsByTx.get(t.id) || [];
+  return txs;
+}
 
 function findOrCreateVendor(name) {
   if (!name) return null;
@@ -69,17 +106,24 @@ router.get('/admin', (req, res) => {
     .prepare('SELECT COALESCE(SUM(amount), 0) AS total FROM transactions WHERE status IN (?, ?)')
     .get(STATUS_PENDING, STATUS_AWAITING_ORDER).total;
 
-  // Average spend per employee -- deliberately excludes Event/Marketing
-  // spend (Events, Catering) since that's reviewed per-event, not as a
-  // per-employee cost; same exclusion computeSpendSummary already applies
-  // when it splits out eventMarketingTotal. Not shown as a per-employee
-  // breakdown (spend isn't tracked to a specific person reliably enough for
-  // that) -- just the one aggregate figure, driven by the headcount set in
-  // Settings -> General.
-  const headcountRaw = db.getSetting('employee_count', '');
-  const headcount = headcountRaw ? parseInt(headcountRaw, 10) : 0;
-  const avgSpendPerEmployee =
-    headcount > 0 ? (summary.recurringTotal + summary.onetimeTotal) / headcount : null;
+  // "Needs Your Review" -- an actionable list of everything currently
+  // sitting in someone's queue, surfaced up top instead of buried a click
+  // away. Expense reports (reviewed inline on the Transactions tab) and
+  // item/supply/event requests (reviewed on the Item Requests tab) are
+  // shown as two distinct groups since they're approved from different
+  // pages.
+  const pendingExpenseReportsCount = db
+    .prepare("SELECT COUNT(*) AS n FROM transactions WHERE source = 'expense_report' AND status = ?")
+    .get(STATUS_PENDING).n;
+  const openRequestsCount = db
+    .prepare("SELECT COUNT(*) AS n FROM transactions WHERE source != 'expense_report' AND status IN (?, ?)")
+    .get(STATUS_PENDING, STATUS_AWAITING_ORDER).n;
+  const openRequests = attachTags(
+    db
+      .prepare(`${TX_JOIN_SELECT} WHERE t.source != 'expense_report' AND t.status IN (?, ?) ORDER BY t.created_at DESC LIMIT 6`)
+      .all(STATUS_PENDING, STATUS_AWAITING_ORDER)
+      .map(hydrate)
+  );
 
   res.render('admin_dashboard', {
     title: 'Dashboard',
@@ -89,17 +133,17 @@ router.get('/admin', (req, res) => {
     onetime_total: summary.onetimeTotal,
     recurring_total: summary.recurringTotal,
     recurring_by_basis: summary.recurringByBasis,
+    spend_by_kind: summary.spendByKind,
     event_marketing_total: summary.eventMarketingTotal,
     pending_count: pendingCount,
     upcoming_spend: upcomingSpend,
-    avg_spend_per_employee: avgSpendPerEmployee,
+    pending_expense_reports_count: pendingExpenseReportsCount,
+    open_requests_count: openRequestsCount,
+    open_requests: openRequests,
     top_categories: summary.topCategories.slice(0, 10),
-    top_vendors: summary.topVendors.slice(0, 10),
+    spend_by_tag: computeSpendByTag(db, selectedYear),
+    by_employee: summary.byEmployeeSorted,
     months_sorted: summary.monthsSorted,
-    year_over_year: summary.yearOverYear,
-    no_prior_year_data: summary.noPriorYearData,
-    prev_year: summary.prevYear,
-    curr_year: summary.currYear,
   });
 });
 
@@ -137,6 +181,7 @@ router.get('/admin/transactions/requests', (req, res) => {
     .prepare(`${TX_JOIN_SELECT} WHERE ${clauses.join(' AND ')} ORDER BY t.created_at DESC`)
     .all(...params)
     .map(hydrate);
+  attachTags(requests);
 
   res.render('item_requests', {
     title: 'Item Requests',
@@ -152,7 +197,9 @@ router.get('/admin/transactions/requests', (req, res) => {
 router.get('/admin/transactions/requests/:id', (req, res) => {
   const tx = db.prepare(`${TX_JOIN_SELECT} WHERE t.id = ?`).get(req.params.id);
   if (!tx) return res.status(404).send('Not Found');
-  res.render('item_request_detail', { title: 'Item Request', t: hydrate(tx) });
+  const hydrated = hydrate(tx);
+  attachTags([hydrated]);
+  res.render('item_request_detail', { title: 'Item Request', t: hydrated });
 });
 
 router.post('/admin/approvals/:txId/approve', (req, res) => {
@@ -245,12 +292,19 @@ router.get('/admin/transactions', (req, res) => {
   const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
   const txs = db.prepare(`${TX_JOIN_SELECT} ${where} ORDER BY t.date DESC`).all(...params).map(hydrate);
 
+  attachTags(txs);
+
   res.render('transactions', {
     title: 'Transactions',
     txs,
     categories: listCategories.all(),
+    tags: listTags.all(),
     employees: listEmployees.all(),
     filters: { ...req.query, status: status === undefined ? STATUS_APPROVED : status },
+    // Round-tripped through the inline edit form's hidden "next" field so
+    // saving an edit returns to this same filtered/sorted view instead of
+    // resetting to the unfiltered list.
+    currentUrl: req.originalUrl,
   });
 });
 
@@ -322,8 +376,23 @@ router.post('/admin/transactions/:txId/update', (req, res) => {
     tx.id
   );
 
+  // Tags: only touched when the form actually included at least one tag_
+  // field -- lets other callers (e.g. a future API) update a transaction
+  // without needing to know/resend its tags, while the edit form (which
+  // always renders all tag checkboxes) can freely replace the full set.
+  if (Object.keys(req.body).some((k) => k === 'tags_present')) {
+    const finalCatId = catId || tx.category_id;
+    const tagNamesRaw = req.body.tag;
+    const tagNames = Array.isArray(tagNamesRaw) ? tagNamesRaw : tagNamesRaw ? [tagNamesRaw] : [];
+    clearTxTags.run(tx.id);
+    for (const tagName of tagNames) {
+      const tag = findOrCreateTag(tagName, finalCatId);
+      if (tag) linkTxTag.run(tx.id, tag.id);
+    }
+  }
+
   flash(req, 'success', 'Transaction updated.');
-  res.redirect('/admin/transactions');
+  res.redirect(req.body.next || '/admin/transactions');
 });
 
 // GET/POST /admin/transactions/new

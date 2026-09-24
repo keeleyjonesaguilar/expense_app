@@ -26,51 +26,84 @@ const XLSX = require('xlsx');
 
 const db = require('../db');
 const { toISODate } = require('./util');
+const { classifyReceiptWithAI, classifyDescriptionsBatch, TAG_TO_EVENT_TYPE } = require('./aiClassify');
+
+function eventTypeFromTags(tags) {
+  const match = tags.find((t) => TAG_TO_EVENT_TYPE[t.name]);
+  return match ? TAG_TO_EVENT_TYPE[match.name] : null;
+}
 
 // ---------------------------------------------------------------------------
-// Category keyword rules -- ordered most-specific-first so a broad word
+// Category+tag keyword rules -- ordered most-specific-first so a broad word
 // (e.g. "office") doesn't steal a match that a more specific phrase should
-// win. This is a starting ruleset; the admin can always override a
-// suggestion, and every suggestion is labeled "suggested" until approved.
+// win. Deterministic fallback for when AI classification is off/unreachable
+// -- the AI path (aiClassify.js) reads the item's actual meaning and is
+// materially more accurate than keyword matching, especially now that
+// there are only 4 categories but many more tag distinctions to get right.
+// This is a starting ruleset; an admin can always override a suggestion,
+// and every suggestion is labeled "suggested" until approved.
+// [regex, category name, tag name]
 // ---------------------------------------------------------------------------
 const RULES = [
-  [/\b(gift card|giftcard|visa gift|amazon gift)\b/i, 'Gift Cards'],
-  [/\b(conference room|projector|tv mount|video bar|meeting room)\b/i, 'Conference Room Equipment'],
-  [/\b(monitor|docking station|laptop stand|keyboard|mouse pad|webcam|usb hub|cable)\b/i, 'Computer Accessories'],
-  [/\b(laptop|desktop|computer|macbook|chromebook)\b/i, 'Computer Equipment'],
-  [/\b(phone case|airtag|charger|earbuds|headphone|tablet|ipad)\b/i, 'Electronics & IT Equipment'],
-  [/\b(fire extinguisher|first aid|band-?aid|bandage|medical kit|aed)\b/i, 'First Aid & Medical Supplies'],
-  [/\b(hard hat|safety glasses|ppe|safety vest|steel toe|respirator|ear plug)\b/i, 'Safety Supplies'],
-  [/\b(pest control|exterminator|termite|rodent)\b/i, 'Pest Control'],
-  [/\b(pallet|freight|fedex|ups|usps|shipping label|postage|pirate ship)\b/i, 'Shipping Supplies'],
-  [/\b(oil change|tire|car wash|vehicle|windshield|dash cam)\b/i, 'Vehicle Supplies'],
-  [/\b(binder|binding|comb bind|laminat)\b/i, 'Binding Supplies'],
-  [/\b(course|training|certification|udemy|textbook|workshop|seminar|conference ticket|tuition)\b/i, 'Personal Development'],
-  [/\b(cleaning|disinfect|sanitiz|paper towel dispenser|trash bag|mop|broom)\b/i, 'Cleaning Supplies'],
-  [/\b(coffee|k-?cup|creamer|espresso)\b/i, 'Coffee Supplies'],
-  [/\b(soda|energy drink|sparkling water|juice|celsius|gatorade|bodyarmor)\b/i, 'Beverages'],
-  [/\b(candy|chocolate|snack|chips|granola|popcorn)\b/i, 'Office Snacks & Candy'],
-  [/\b(lunch|dinner|restaurant|doordash|grubhub|catering|donuts|pizza|domino)\b/i, 'Food & Meals'],
-  [/\b(paper towel|napkin|toilet paper|tissue)\b/i, 'Paper Products'],
-  [/\b(printer ink|toner|ink cartridge)\b/i, 'Printer Supplies'],
-  [/\b(business card|printing service|print shop|banner|signage|flyer)\b/i, 'Printing Services'],
-  [/\b(label maker|label printer|barcode label)\b/i, 'Label Supplies'],
-  [/\b(dish|cup|mug|cooler|kitchen|utensil|microwave|fridge|refrigerator)\b/i, 'Kitchen Supplies'],
-  [/\b(decor|frame|plant|artwork|rug)\b/i, 'Office Decor'],
-  [/\b(desk|chair|filing cabinet|table|cubicle|standing desk)\b/i, 'Office Furniture'],
-  [/\b(file organizer|binder clip|folder|divider|storage bin|label tape)\b/i, 'Office Organization'],
-  [/\b(software|subscription|saas|glideapps|hubspot|zoom|slack)\b/i, 'Services'],
-  [/\b(pen|paper|notebook|stapler|scissors|tape|sticky note|envelope)\b/i, 'Office Supplies'],
-  [/\b(event ticket|sponsorship|booth|expo|nawic|networking event)\b/i, 'Events'],
-  [/\b(maintenance|repair|hvac|hardware store|tool|drill|screwdriver)\b/i, 'Maintenance / Hardware Supplies'],
+  // Team Engagement/Employee Retention
+  [/\b(employee gift|birthday gift|anniversary gift)\b/i, 'Team Engagement/Employee Retention', 'Employee Gifts'],
+  [/\b(gift card|giftcard|visa gift|amazon gift)\b/i, 'Team Engagement/Employee Retention', 'Employee Gifts'],
+  [/\b(lunch\s*(?:and|&)\s*learn|\bl\s*&\s*l\b)\b/i, 'Team Engagement/Employee Retention', 'L&L'],
+  [/\b(holiday party|holiday social|christmas party)\b/i, 'Team Engagement/Employee Retention', 'Holiday Party'],
+  [/\bsummer (social|party|picnic)\b/i, 'Team Engagement/Employee Retention', 'Summer Social'],
+
+  // Business Development
+  [/\b(sponsorship|sponsor a|booth fee)\b/i, 'Business Development', 'Sponsorships'],
+  [/\b(conference registration|summit|convention)\b/i, 'Business Development', 'Conferences'],
+  [/\b(membership dues|chamber of commerce|association membership)\b/i, 'Business Development', 'Memberships'],
+  [/\b(event ticket|expo|nawic|networking event|mixer)\b/i, 'Business Development', 'Events'],
+  [/\b(client (?:lunch|dinner)|client meal|client gift)\b/i, 'Business Development', 'Gifts & Meals'],
+
+  // Professional Development
+  [/\b(renewal|recertif|license renewal)\b/i, 'Professional Development', 'Renewals'],
+  [/\b(course|training|certification|udemy|coursera|textbook|workshop|seminar|tuition)\b/i, 'Professional Development', 'Courses'],
+
+  // Office Expenses
+  [/\b(software|subscription|saas|glideapps|hubspot|zoom|slack)\b/i, 'Office Expenses', 'Software & Tech'],
+  [/\b(conference room|projector|tv mount|video bar|meeting room)\b/i, 'Office Expenses', 'Software & Tech'],
+  [/\b(monitor|docking station|laptop stand|keyboard|mouse pad|webcam|usb hub|cable|speaker)\b/i, 'Office Expenses', 'Software & Tech'],
+  [/\b(laptop|desktop|computer|macbook|chromebook)\b/i, 'Office Expenses', 'Software & Tech'],
+  [/\b(phone case|airtag|charger|earbuds|headphone|tablet|ipad)\b/i, 'Office Expenses', 'Software & Tech'],
+  [/\b(hard hat|safety glasses|\bppe\b|safety vest|steel toe|respirator|ear plug)\b/i, 'Office Expenses', 'PPE'],
+  [/\b(fire extinguisher|first aid|band-?aid|bandage|medical kit|aed)\b/i, 'Office Expenses', 'PPE'],
+  [/\b(binder|binding|comb bind|laminat)\b/i, 'Office Expenses', 'Consumables'],
+  [/\b(cleaning|disinfect|sanitiz|paper towel dispenser|trash bag|mop|broom)\b/i, 'Office Expenses', 'Consumables'],
+  [/\b(coffee|k-?cup|creamer|espresso)\b/i, 'Office Expenses', 'Consumables'],
+  [/\b(soda|energy drink|sparkling water|juice|celsius|gatorade|bodyarmor)\b/i, 'Office Expenses', 'Consumables'],
+  [/\b(candy|chocolate|snack|chips|granola|popcorn)\b/i, 'Office Expenses', 'Consumables'],
+  [/\b(paper towel|napkin|toilet paper|tissue)\b/i, 'Office Expenses', 'Consumables'],
+  [/\b(printer ink|toner|ink cartridge)\b/i, 'Office Expenses', 'Consumables'],
+  [/\b(dish|cup|mug|cooler|kitchen|utensil|microwave|fridge|refrigerator)\b/i, 'Office Expenses', 'Consumables'],
+  [/\b(pest control|exterminator|termite|rodent)\b/i, 'Office Expenses', 'Supplies'],
+  [/\b(pallet|freight|fedex|ups|usps|shipping label|postage|pirate ship)\b/i, 'Office Expenses', 'Supplies'],
+  [/\b(oil change|tire|car wash|vehicle|windshield|dash cam)\b/i, 'Office Expenses', 'Supplies'],
+  // "business card" alone false-matched holders/displays (a desk accessory,
+  // not a printing job) -- require actual printing intent in the phrase.
+  [/\b(business card printing|print(?:ing)? business cards?|printing service|print shop|banner|signage|flyer)\b/i, 'Office Expenses', 'Supplies'],
+  [/\b(label maker|label printer|barcode label)\b/i, 'Office Expenses', 'Supplies'],
+  [/\b(decor|frame|plant|artwork|rug)\b/i, 'Office Expenses', 'Supplies'],
+  [/\b(desk|chair|filing cabinet|table|cubicle|standing desk)\b/i, 'Office Expenses', 'Supplies'],
+  [/\b(file organizer|binder clip|folder|divider|storage bin|label tape)\b/i, 'Office Expenses', 'Supplies'],
+  [/\b(pen|paper|notebook|stapler|scissors|tape|sticky note|envelope)\b/i, 'Office Expenses', 'Supplies'],
+  [/\b(maintenance|repair|hvac|hardware store|tool|drill|screwdriver)\b/i, 'Office Expenses', 'Supplies'],
 ];
 
-function suggestCategory(text) {
-  if (!text) return 'Miscellaneous';
-  for (const [pattern, cat] of RULES) {
-    if (pattern.test(text)) return cat;
+// Returns { category, tag } -- always a real category (defaults to "Office
+// Expenses"/"Supplies", the closest thing to a catch-all in the new closed
+// 4-category taxonomy) since, unlike the old per-category regex, there's no
+// separate "Miscellaneous" category anymore.
+function suggestCategoryAndTag(text) {
+  if (text) {
+    for (const [pattern, category, tag] of RULES) {
+      if (pattern.test(text)) return { category, tag };
+    }
   }
-  return 'Miscellaneous';
+  return { category: 'Office Expenses', tag: 'Supplies' };
 }
 
 const DATE_PATTERNS = [/(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})/, /(\d{4}-\d{2}-\d{2})/];
@@ -273,12 +306,16 @@ function resolveColumnMapping(columns, aliasMap, overrideMap) {
 // alias-based auto-match -- used by the bulk-import review grid's
 // "Re-map & Preview" control; not persisted (Settings -> Import Mapping is
 // what teaches the matcher new aliases permanently).
-function extractFromSpreadsheet(filepath, sheetName, overrideMap) {
+async function extractFromSpreadsheet(filepath, sheetName, overrideMap) {
   let records;
   const aliasMap = loadColumnAliases();
   if (filepath.toLowerCase().endsWith('.csv')) {
-    const content = fs.readFileSync(filepath, 'utf8');
-    records = parseCsv(content, { columns: true, skip_empty_lines: true, relax_column_count: true });
+    // Excel's "preserve leading zeros/exact text" escape (="0123") -- used
+    // by Amazon Business exports for UNSPSC codes and ZIP codes -- isn't
+    // valid CSV (a quote can't start mid-field) and makes the parser throw.
+    // Unwrap it to a plain quoted value before parsing.
+    const content = fs.readFileSync(filepath, 'utf8').replace(/="([^"]*)"/g, '"$1"');
+    records = parseCsv(content, { columns: true, skip_empty_lines: true, relax_column_count: true, bom: true });
   } else {
     const workbook = XLSX.readFile(filepath);
     let name = sheetName && workbook.SheetNames.includes(sheetName) ? sheetName : null;
@@ -295,14 +332,31 @@ function extractFromSpreadsheet(filepath, sheetName, overrideMap) {
   if (!records.length) return { rows: [], columnMapping: [] };
   const columns = Object.keys(records[0]);
   const { cols, columnMapping } = resolveColumnMapping(columns, aliasMap, overrideMap);
-  const employees = db.prepare('SELECT id, name FROM users').all();
+  const employees = db.prepare('SELECT id, name FROM employees').all();
+  const allCategories = db.prepare('SELECT name, kind, recurrence_basis FROM categories').all();
+  const categoryDetails = {};
+  for (const c of allCategories) categoryDetails[c.name] = c;
+  const matchCategory = (raw) => {
+    if (!raw) return null;
+    const found = allCategories.find((c) => c.name.toLowerCase() === raw.toLowerCase());
+    return found ? found.name : null;
+  };
   const findEmployee = (name) => {
     if (!name) return null;
     const lower = name.toLowerCase();
     return employees.find((e) => e.name.toLowerCase() === lower) || null;
   };
 
-  const rows = records.map((r) => {
+  // Two passes: first build every row's deterministic fields plus the
+  // regex-based category guess (always available, needed as a fallback
+  // regardless); then, for rows where the sheet didn't already give an
+  // explicit category (that stays authoritative -- an admin/exporting
+  // system already decided it), send the descriptions to the local AI in
+  // batches so each item's actual title gets judged on its own merits
+  // instead of falling back to a generic bucket. See aiClassify.js's
+  // classifyDescriptionsBatch for why this is batched rather than one
+  // request per row (one-at-a-time would take hours on a large import).
+  const preRows = records.map((r) => {
     const desc = cleanStr(cols.description ? r[cols.description] : null) || '';
     const amt = cols.amount ? coerceAmount(r[cols.amount]) : null;
     const dateVal = cols.date ? coerceDate(r[cols.date]) : null;
@@ -313,23 +367,18 @@ function extractFromSpreadsheet(filepath, sheetName, overrideMap) {
     const employeeName = cleanStr(cols.employee ? r[cols.employee] : null);
     const employee = findEmployee(employeeName);
 
-    // The source sheet's own category column is authoritative -- an admin
-    // (or the exporting system) already assigned it, so trust it over the
-    // keyword-guessed category instead of just using it as a tie-breaker.
-    const explicitCategory = cleanStr(cols.category ? r[cols.category] : null);
-    const suggestedCategory = explicitCategory || suggestCategory(desc);
-    // Events are almost always one-off (a sponsorship, a conference ticket)
-    // rather than a recurring monthly cost -- that's the fallback when the
-    // sheet doesn't have its own One-Time-style column; an explicit
-    // yes/no/recurring value in a matched column wins over the fallback.
-    const eventsFallback = suggestedCategory === 'Events';
-    const suggestOneTime = parseOneTimeValue(cols.one_time ? r[cols.one_time] : null, eventsFallback);
+    // The source sheet's own category column is authoritative ONLY when it
+    // actually names a real category (case-insensitively) -- an admin (or
+    // the exporting system) already assigned it, so trust it over both the
+    // keyword-guessed category and the AI's opinion in that case. Text that
+    // doesn't match anything real (a spreadsheet's own unrelated taxonomy
+    // column, a typo, different casing) is worse than no category at all --
+    // treat it as absent so the row still gets a real category via AI/regex
+    // instead of silently carrying garbage into the review grid.
+    const explicitCategoryRaw = cleanStr(cols.category ? r[cols.category] : null);
+    const explicitCategory = matchCategory(explicitCategoryRaw);
+    const regexGuess = suggestCategoryAndTag(desc);
 
-    // Order-# has no dedicated Transaction column, so it goes in notes
-    // rather than being silently dropped -- this is a deliberate, matched
-    // alias, unlike a genuinely unrecognized column (which is dropped
-    // entirely, not folded into notes; see resolveColumnMapping/
-    // columnMapping for what wasn't imported anywhere).
     const noteParts = [];
     const sheetNotes = cleanStr(cols.notes ? r[cols.notes] : null);
     if (sheetNotes) noteParts.push(sheetNotes);
@@ -346,10 +395,73 @@ function extractFromSpreadsheet(filepath, sheetName, overrideMap) {
       unit_price: unitPrice,
       employee_id: employee ? employee.id : null,
       employee_name: employee ? employee.name : employeeName,
-      suggested_category: suggestedCategory,
-      suggest_one_time: suggestOneTime,
+      explicitCategory,
+      regexCategory: explicitCategory || regexGuess.category,
+      regexTag: regexGuess.tag,
+      one_time_raw: cols.one_time ? r[cols.one_time] : null,
       notes: noteParts.join(' | ').slice(0, 500),
       raw_text: desc,
+    };
+  });
+
+  const aiItems = preRows
+    .map((pr, index) => ({ index, description: pr.description, amount: pr.amount, explicit: !!pr.explicitCategory }))
+    .filter((it) => !it.explicit && it.description);
+  const aiResults = aiItems.length ? await classifyDescriptionsBatch(aiItems) : new Map();
+
+  // A proposed-new TAG used by exactly ONE item across the whole import is
+  // very unlikely to be a real recurring tag -- much more likely an odd
+  // one-off item the model over-specifically invented a label for (the old
+  // per-category version of this observed things like "Air Fresheners" for
+  // a single item). Rather than relying on prompt wording alone to prevent
+  // that, drop that one tag deterministically -- prompt tuning reduces how
+  // often this happens, this guarantees it can't clutter the review screen
+  // regardless of how the model behaves on a given run. A row left with no
+  // tags at all after that falls back to the plain regex guess entirely.
+  const newTagCounts = new Map();
+  for (const ai of aiResults.values()) {
+    for (const t of ai.tags) {
+      if (!t.is_new) continue;
+      const key = `${ai.suggested_category}::${t.name}`;
+      newTagCounts.set(key, (newTagCounts.get(key) || 0) + 1);
+    }
+  }
+  for (const [index, ai] of aiResults) {
+    ai.tags = ai.tags.filter((t) => !t.is_new || newTagCounts.get(`${ai.suggested_category}::${t.name}`) !== 1);
+    if (!ai.tags.length) aiResults.delete(index);
+  }
+
+  const rows = preRows.map((pr, index) => {
+    const ai = aiResults.get(index);
+    const suggestedCategory = ai ? ai.suggested_category : pr.regexCategory;
+    const tags = ai ? ai.tags : [{ name: pr.regexTag, is_new: false }];
+    // Events/Conferences/Sponsorships are almost always one-off rather than
+    // a recurring monthly cost -- that's the fallback when the sheet
+    // doesn't have its own One-Time-style column; an explicit yes/no/
+    // recurring value in a matched column wins over the fallback.
+    const eventsFallback = tags.some((t) => ['Events', 'Conferences', 'Sponsorships'].includes(t.name));
+    const suggestOneTime = parseOneTimeValue(pr.one_time_raw, eventsFallback);
+
+    return {
+      date: pr.date,
+      amount: pr.amount,
+      description: pr.description,
+      vendor: pr.vendor,
+      link: pr.link,
+      quantity: pr.quantity,
+      unit_price: pr.unit_price,
+      employee_id: pr.employee_id,
+      employee_name: pr.employee_name,
+      suggested_category: suggestedCategory,
+      tags,
+      suggested_kind: ai ? ai.suggested_kind : categoryDetails[suggestedCategory]?.kind || null,
+      suggested_recurrence_basis: ai
+        ? ai.suggested_recurrence_basis
+        : categoryDetails[suggestedCategory]?.recurrence_basis || null,
+      suggested_event_type: ai ? ai.suggested_event_type : eventTypeFromTags(tags),
+      suggest_one_time: suggestOneTime,
+      notes: pr.notes,
+      raw_text: pr.raw_text,
     };
   });
 
@@ -398,23 +510,62 @@ async function extractTextFromImage(filepath) {
 // file_type in {'pdf','image'}. Returns a single candidate row (a receipt/
 // statement usually represents one purchase or one page of a statement) with
 // the raw OCR/text kept for the human reviewer.
+//
+// Baseline extraction is always the old regex/keyword heuristics below --
+// cheap, fully deterministic, and a safe fallback. When OLLAMA_ENABLED=true
+// (see aiClassify.js), a local vision-capable LLM is also asked to read the
+// receipt (the image directly, or the extracted PDF text) and its answer
+// overrides the heuristic fields it filled in, plus adds fields the
+// heuristics never had an opinion on: a proposed *new* category's kind
+// (fixed/variable/semi-variable/one-time-growth/discretionary) and
+// recurrence cadence when the receipt doesn't match anything that already
+// exists. If the model is unreachable or its answer doesn't parse, this
+// silently falls back to the heuristic-only result -- ai_used tells the
+// caller/template which happened.
 async function extractFromDocument(filepath, fileType) {
   const text = fileType === 'pdf' ? await extractTextFromPdf(filepath) : await extractTextFromImage(filepath);
-  const suggestedCategory = suggestCategory(text);
+  const guess = suggestCategoryAndTag(text);
+  const category = db.prepare('SELECT kind, recurrence_basis FROM categories WHERE name = ?').get(guess.category);
+  const tags = [{ name: guess.tag, is_new: false }];
 
-  return {
+  const baseline = {
     date: parseDateGuess(text),
     amount: parseAmountGuess(text),
     description: guessVendor(text) || path.basename(filepath),
     vendor: guessVendor(text),
-    suggested_category: suggestedCategory,
-    suggest_one_time: suggestedCategory === 'Events',
+    suggested_category: guess.category,
+    tags,
+    suggested_kind: category ? category.kind : null,
+    suggested_recurrence_basis: category ? category.recurrence_basis : null,
+    suggested_event_type: eventTypeFromTags(tags),
+    suggest_one_time: category ? category.recurrence_basis === 'one-time' : false,
+    ai_confidence: null,
+    ai_used: false,
     raw_text: text.slice(0, 5000),
+  };
+
+  const ai = await classifyReceiptWithAI({ imagePath: fileType === 'image' ? filepath : null, text });
+  if (!ai) return baseline;
+
+  return {
+    ...baseline,
+    date: ai.date || baseline.date,
+    amount: ai.amount != null ? ai.amount : baseline.amount,
+    description: ai.description || baseline.description,
+    vendor: ai.vendor || baseline.vendor,
+    suggested_category: ai.suggested_category,
+    tags: ai.tags,
+    suggested_kind: ai.suggested_kind,
+    suggested_recurrence_basis: ai.suggested_recurrence_basis,
+    suggested_event_type: ai.suggested_event_type,
+    suggest_one_time: ai.suggest_one_time,
+    ai_confidence: ai.confidence,
+    ai_used: true,
   };
 }
 
 module.exports = {
-  suggestCategory,
+  suggestCategoryAndTag,
   parseDateGuess,
   parseAmountGuess,
   guessVendor,

@@ -11,7 +11,7 @@
   </p>
   <form method="post" action="/admin/settings/reset-transactions" class="row g-2 align-items-end" id="reset-form">
     <div class="col-md-6">
-      <label class="form-label small mb-0">Type <code>DELETE</code> to confirm</label>
+      <label class="form-label small mb-0">Type <code>DELETE</code> to confirm (not case-sensitive)</label>
       <input type="text" name="confirm" id="confirm-input" class="form-control" autocomplete="off">
     </div>
     <div class="col-md-6">
@@ -26,7 +26,7 @@ const extraScripts = `
   var input = document.getElementById('confirm-input');
   var btn = document.getElementById('reset-btn');
   var form = document.getElementById('reset-form');
-  input.addEventListener('input', function () { btn.disabled = input.value !== 'DELETE'; });
+  input.addEventListener('input', function () { btn.disabled = input.value.trim().toLowerCase() !== 'delete'; });
   form.addEventListener('submit', function (e) {
     if (!confirm('This permanently deletes every transaction. Are you sure?')) e.preventDefault();
   });

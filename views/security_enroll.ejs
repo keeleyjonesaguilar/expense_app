@@ -1,0 +1,22 @@
+<%- include('partials/head', { title: 'Set Up Two-Factor Auth' }) %>
+<h3 class="mb-3">Set Up Two-Factor Auth</h3>
+
+<div class="card p-4" style="max-width:500px;">
+  <p class="text-muted">Scan this QR code with Microsoft Authenticator (or any authenticator app), then enter the 6-digit code it shows to confirm.</p>
+  <% if (qr_data_url) { %>
+    <div class="text-center mb-3">
+      <img src="<%= qr_data_url %>" alt="QR code for two-factor setup" style="width:220px;height:220px;">
+    </div>
+    <p class="small text-muted">Can't scan? Enter this key manually in your app:</p>
+    <p class="mb-3"><code style="font-size:1rem;letter-spacing:.05em;"><%= secret %></code></p>
+  <% } %>
+  <form method="post" action="/account/security/confirm">
+    <div class="mb-3">
+      <label class="form-label">6-digit code</label>
+      <input type="text" name="code" class="form-control form-control-lg text-center" style="letter-spacing:.3em" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="6" required autofocus>
+    </div>
+    <button type="submit" class="btn btn-primary w-100">Confirm &amp; Enable</button>
+  </form>
+  <p class="mt-3 text-muted small mb-0"><a href="/account/security">Cancel</a></p>
+</div>
+<%- include('partials/foot') %>

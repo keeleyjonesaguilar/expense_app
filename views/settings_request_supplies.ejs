@@ -1,0 +1,25 @@
+<%- include('partials/head', { title: 'Settings' }) %>
+<%- include('partials/settings_nav', { active: 'request-supplies' }) %>
+
+<p class="text-muted small" style="max-width:700px;">
+  Controls the public, no-login <a href="/request-supplies" target="_blank">Request Supplies</a> form.
+  Employees switch between two modes at the top of that form — everyday office supplies, and
+  events / professional development (conferences, speaking engagements, memberships, courses, etc.)
+  — so requests land in the right category and admins can track them from the
+  <a href="/admin/transactions/requests">Item Requests</a> queue.
+</p>
+
+<div class="card p-4" style="max-width:700px;">
+  <form method="post">
+    <div class="mb-3">
+      <label class="form-label">Office Supplies — intro text</label>
+      <textarea name="request_form_intro" class="form-control" rows="2"><%= request_form_intro %></textarea>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Event / Professional Development — intro text</label>
+      <textarea name="event_request_form_intro" class="form-control" rows="2"><%= event_request_form_intro %></textarea>
+    </div>
+    <button class="btn btn-primary">Save</button>
+  </form>
+</div>
+<%- include('partials/foot') %>

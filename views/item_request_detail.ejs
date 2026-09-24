@@ -15,6 +15,7 @@
     <tbody>
       <tr><th style="width:160px">Date requested</th><td><%= fmtDate(t.date) %></td></tr>
       <tr><th>Category</th><td><%= t.category ? t.category.name : 'Uncategorized' %></td></tr>
+      <% if (t.tags && t.tags.length) { %><tr><th>Tags</th><td><% t.tags.forEach(function (name) { %><span class="badge text-bg-light border me-1"><%= name %></span><% }) %></td></tr><% } %>
       <% if (t.quantity != null) { %><tr><th>Quantity</th><td><%= t.quantity %></td></tr><% } %>
       <% if (t.amount) { %><tr><th>Amount</th><td>$<%= fmt2(t.amount) %></td></tr><% } %>
       <% if (t.link) { %><tr><th>Link</th><td><a href="<%= t.link %>" target="_blank" rel="noopener"><%= t.link %></a></td></tr><% } %>

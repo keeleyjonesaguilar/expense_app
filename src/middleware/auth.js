@@ -15,6 +15,11 @@ function attachUser(req, res, next) {
     if (!user) {
       // Session points at a user that no longer exists -- clear it.
       req.session.userId = null;
+    } else if (!user.active) {
+      // Deactivated mid-session -- end it immediately rather than waiting
+      // for them to log back in.
+      user = null;
+      req.session.userId = null;
     }
   }
 

@@ -4,6 +4,8 @@ const path = require('path');
 
 const db = require('../db');
 const extraction = require('../lib/extraction');
+const { findDuplicates } = require('../lib/duplicates');
+const { OLLAMA_ENABLED } = require('../lib/aiClassify');
 const { extOf, secureFilename } = require('../lib/util');
 const { UPLOADS_DIR, ALLOWED_IMPORT_EXT, upload } = require('../lib/uploads');
 const { requireAuth, requireAdmin, flash } = require('../middleware/auth');
@@ -14,7 +16,27 @@ const router = express.Router();
 router.use(requireAuth, requireAdmin);
 
 const listCategories = db.prepare('SELECT * FROM categories ORDER BY name');
-const listEmployees = db.prepare('SELECT * FROM users ORDER BY name');
+const listTags = db.prepare(
+  'SELECT tags.id, tags.name, c.name AS category_name FROM tags JOIN categories c ON c.id = tags.category_id ORDER BY c.name, tags.name'
+);
+const findTagByName = db.prepare('SELECT * FROM tags WHERE name = ?');
+const insertTag = db.prepare('INSERT INTO tags (name, category_id) VALUES (?, ?)');
+const linkTag = db.prepare('INSERT OR IGNORE INTO transaction_tags (transaction_id, tag_id) VALUES (?, ?)');
+
+// Looks a tag up by name; if it doesn't exist yet (an AI/regex-proposed new
+// tag the reviewer kept), creates it under the given category -- same
+// "auto-create on commit, human already reviewed it" pattern as vendors.
+function findOrCreateTag(name, categoryId) {
+  if (!name) return null;
+  let tag = findTagByName.get(name);
+  if (!tag) {
+    const info = insertTag.run(name, categoryId);
+    tag = { id: info.lastInsertRowid, name, category_id: categoryId };
+  }
+  return tag;
+}
+
+const listEmployees = db.prepare('SELECT * FROM employees WHERE active = 1 ORDER BY name');
 const listRecentUploads = db.prepare('SELECT * FROM uploads ORDER BY uploaded_at DESC LIMIT 10');
 const getUpload = db.prepare('SELECT * FROM uploads WHERE id = ?');
 const insertUpload = db.prepare(
@@ -38,6 +60,23 @@ function previewCachePath(uploadId) {
   return path.join(UPLOADS_DIR, `preview_${uploadId}.json`);
 }
 
+// Flags a row as a likely accidental re-import -- see lib/duplicates.js for
+// exactly what counts as a match (date+description, or date+amount+vendor
+// with a Pirate Ship exception). Advisory, not blocking: surfaced in the
+// review grid so a human decides whether to check "Skip" -- nothing here
+// prevents a commit.
+function flagDuplicates(rows) {
+  for (const row of rows) {
+    row.duplicate_of = findDuplicates({
+      date: row.date,
+      description: row.description,
+      amount: row.amount,
+      vendor: row.vendor,
+    });
+  }
+  return rows;
+}
+
 // GET /admin/import/template.csv -- a blank starter file with the canonical
 // column set (matches what a Transactions CSV export re-imports as, per
 // the round-trip requirement), plus one clearly marked example row so a
@@ -46,8 +85,18 @@ function previewCachePath(uploadId) {
 // etc.) still work fine -- those aliases weren't removed, this is just the
 // template's own preferred shape.
 router.get('/admin/import/template.csv', (req, res) => {
-  const header = ['Date', 'Amount', 'Vendor', 'Category', 'Quantity', 'Employee', 'One-Time', 'Notes'];
-  const example = ['2026-01-15', '19.28', 'Amazon', 'Office Supplies', '2', '', 'no', 'EXAMPLE ROW -- delete before uploading'];
+  const header = ['Date', 'Amount', 'Vendor', 'Description', 'Category', 'Quantity', 'Employee', 'One-Time', 'Notes'];
+  const example = [
+    '2026-01-15',
+    '19.28',
+    'Amazon',
+    'Copy paper, 8 reams',
+    'Office Supplies',
+    '2',
+    '',
+    'no',
+    'EXAMPLE ROW -- delete before uploading',
+  ];
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', 'attachment; filename="import-template.csv"');
   res.send(toCsv([header, example]));
@@ -72,7 +121,7 @@ function readCache(uploadId) {
 }
 
 // GET/POST /admin/import -- ported from app.py's bulk_import().
-router.get('/admin/import', (req, res) => {
+router.get('/admin/import', async (req, res) => {
   const uploadId = req.query.upload_id ? parseInt(req.query.upload_id, 10) : null;
   let previewRows = null;
   let columnMapping = null;
@@ -93,7 +142,7 @@ router.get('/admin/import', (req, res) => {
       if (fs.existsSync(storedPath)) {
         sheets = extraction.listSpreadsheetSheets(storedPath);
         if (sheets && (req.query.sheet || req.query.map)) {
-          const { rows, columnMapping: mapping } = extraction.extractFromSpreadsheet(
+          const { rows, columnMapping: mapping } = await extraction.extractFromSpreadsheet(
             storedPath,
             req.query.sheet,
             req.query.map
@@ -107,7 +156,7 @@ router.get('/admin/import', (req, res) => {
 
     const cached = readCache(uploadId);
     if (cached) {
-      previewRows = cached.rows;
+      previewRows = flagDuplicates(cached.rows);
       columnMapping = cached.columnMapping;
     }
   }
@@ -115,6 +164,7 @@ router.get('/admin/import', (req, res) => {
   res.render('bulk_import', {
     title: 'Bulk Import',
     categories: listCategories.all(),
+    tags: listTags.all(),
     employees: listEmployees.all(),
     preview_rows: previewRows,
     column_mapping: columnMapping,
@@ -123,6 +173,7 @@ router.get('/admin/import', (req, res) => {
     sheets,
     current_sheet: currentSheet,
     recent_uploads: listRecentUploads.all(),
+    ai_enabled: OLLAMA_ENABLED,
   });
 });
 
@@ -148,7 +199,7 @@ router.post('/admin/import', upload.single('file'), async (req, res) => {
   let fileType;
   let defaultSheet = null;
   if (['csv', 'xlsx', 'xls'].includes(extn)) {
-    ({ rows, columnMapping } = extraction.extractFromSpreadsheet(destPath));
+    ({ rows, columnMapping } = await extraction.extractFromSpreadsheet(destPath));
     fileType = 'spreadsheet';
     if (extn !== 'csv') {
       const sheets = extraction.listSpreadsheetSheets(destPath);
@@ -227,7 +278,7 @@ router.post('/admin/import/:uploadId/commit', (req, res) => {
     const employeeIdRaw = req.body[`employee_id_${i}`] ? parseInt(req.body[`employee_id_${i}`], 10) : null;
     const employeeId = employeeIdRaw && employeeIds.has(employeeIdRaw) ? employeeIdRaw : null;
 
-    insertTx.run(
+    const info = insertTx.run(
       dateStr,
       amount,
       (req.body[`description_${i}`] || '').slice(0, 500),
@@ -245,6 +296,17 @@ router.post('/admin/import/:uploadId/commit', (req, res) => {
       (rows[i].raw_text || '').slice(0, 5000),
       uploadId
     );
+
+    // Tag checkboxes for this row: name="tag_<i>" repeated once per checked
+    // box -- express's urlencoded parser collects same-name fields into an
+    // array (a single checked box still arrives as a string, not an array).
+    const tagNamesRaw = req.body[`tag_${i}`];
+    const tagNames = Array.isArray(tagNamesRaw) ? tagNamesRaw : tagNamesRaw ? [tagNamesRaw] : [];
+    for (const tagName of tagNames) {
+      const tag = findOrCreateTag(tagName, catId);
+      if (tag) linkTag.run(info.lastInsertRowid, tag.id);
+    }
+
     imported += 1;
   }
 

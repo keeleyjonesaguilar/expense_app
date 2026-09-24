@@ -2,7 +2,7 @@ const express = require('express');
 const db = require('../db');
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 const { STATUS_APPROVED } = require('../constants');
-const { TX_JOIN_SELECT, hydrate, computeSpendSummary } = require('../lib/reportData');
+const { TX_JOIN_SELECT, hydrate, computeSpendSummary, computeSpendByTag } = require('../lib/reportData');
 const { toCsv } = require('../lib/csv');
 
 const router = express.Router();
@@ -25,6 +25,9 @@ router.get('/admin/reports', (req, res) => {
     onetime_total: summary.onetimeTotal,
     recurring_total: summary.recurringTotal,
     top_categories: summary.topCategories,
+    spend_by_tag: computeSpendByTag(db),
+    by_employee: summary.byEmployeeSorted,
+    spend_by_kind: summary.spendByKind,
     top_vendors: summary.topVendors.slice(0, 10),
     year_over_year: summary.yearOverYear,
     prev_year: summary.prevYear,
@@ -33,14 +36,36 @@ router.get('/admin/reports', (req, res) => {
   });
 });
 
-// GET /admin/reports/export.csv -- the category-breakdown table as CSV.
+// GET /admin/reports/export.csv -- the category breakdown, plus the Spend
+// by Type (fixed/variable/etc.) breakdown as a second table underneath, so
+// the one download covers both views of the same numbers.
 router.get('/admin/reports/export.csv', (req, res) => {
   const summary = loadSummary();
-  const header = ['Category', 'Total Spend'];
-  const rows = summary.topCategories.map(([name, total]) => [name, total]);
+  const spendByTag = computeSpendByTag(db);
+  const tagRows = [];
+  for (const [categoryName, tags] of spendByTag) {
+    for (const [tagName, total] of tags) tagRows.push([categoryName, tagName, total]);
+  }
+  const rows = [
+    ['Category', 'Total Spend'],
+    ...summary.topCategories.map(([name, total]) => [name, total]),
+    [],
+    ['Category', 'Tag', 'Total Spend'],
+    ...tagRows,
+    [],
+    ['Person', 'Total Spend'],
+    ...summary.byEmployeeSorted,
+    [],
+    ['Spend by Type', 'Total Spend', '% of Total'],
+    ...summary.spendByKind.map(([name, total]) => [
+      name,
+      total,
+      summary.totalSpend ? `${((total / summary.totalSpend) * 100).toFixed(1)}%` : '0.0%',
+    ]),
+  ];
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', `attachment; filename="report-${new Date().toISOString().slice(0, 10)}.csv"`);
-  res.send(toCsv([header, ...rows]));
+  res.send(toCsv(rows));
 });
 
 module.exports = router;

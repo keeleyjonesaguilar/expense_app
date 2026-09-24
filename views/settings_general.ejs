@@ -9,11 +9,6 @@
       <div class="form-text">Used for per-employee budget figures elsewhere in the app.</div>
     </div>
     <div class="mb-3">
-      <label class="form-label">Request Supplies — intro text</label>
-      <textarea name="request_form_intro" class="form-control" rows="2"><%= request_form_intro %></textarea>
-      <div class="form-text">Shown at the top of the public <a href="/request-supplies" target="_blank">Request Supplies</a> form.</div>
-    </div>
-    <div class="mb-3">
       <label class="form-label">Dashboard default year</label>
       <div class="form-check">
         <input class="form-check-input" type="radio" name="dashboard_year_default" id="ddef-current" value="current-year" <%= dashboard_year_default === 'current-year' ? 'checked' : '' %>>

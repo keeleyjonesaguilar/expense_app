@@ -7,12 +7,31 @@
   <link href="/static/vendor/bootstrap.min.css" rel="stylesheet">
   <style>
     :root {
+      /* Evolution Safety Resources brand palette (from evolutionsafetyresources.com):
+         deep teal + gold. Used for interactive/brand chrome (buttons, links,
+         nav) -- NOT for status badges or chart series, which stay on
+         semantic/categorical colors so they're still readable at a glance. */
+      --brand-teal:#026754; --brand-teal-dark:#014a3c; --brand-gold:#c49b0d;
+
       --series-1:#2a78d6; --series-2:#eb6834; --series-3:#1baf7a; --series-4:#eda100;
       --series-5:#e87ba4; --series-6:#008300; --series-7:#4a3aa7; --series-8:#e34948;
       --status-good:#0ca30c; --status-warning:#fab219; --status-serious:#ec835a; --status-critical:#d03b3b;
+
+      --bs-link-color: var(--brand-teal);
+      --bs-link-color-rgb: 2,103,84;
+      --bs-link-hover-color: var(--brand-teal-dark);
+      --bs-link-hover-color-rgb: 1,74,60;
     }
     body { background:#f7f7f5; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-    .navbar-brand { font-weight: 700; }
+    /* Bootstrap sets --bs-navbar-active-color etc. directly on .navbar
+       (component-scoped), which shadows a :root-level override -- has to
+       be set here to actually take effect. */
+    .navbar {
+      border-top: 3px solid var(--brand-gold);
+      --bs-navbar-active-color: var(--brand-teal);
+      --bs-navbar-hover-color: var(--brand-teal);
+    }
+    .navbar-brand { font-weight: 700; color: var(--brand-teal) !important; }
     .card { border: 1px solid #e6e5e0; box-shadow: none; }
     .stat-tile { background:#fff; border:1px solid #e6e5e0; border-radius:10px; padding:1.1rem 1.3rem; }
     .stat-tile .label { color:#6b6a63; font-size:.8rem; text-transform:uppercase; letter-spacing:.03em; }
@@ -23,6 +42,32 @@
     .badge-onetime { background: var(--series-2); color:#fff; }
     table.table-sm td, table.table-sm th { padding: .45rem .6rem; }
     .nav-link.active { font-weight: 600; }
+    .nav-tabs .nav-link.active { border-top: 2px solid var(--brand-teal); margin-top:-1px; }
+
+    /* Bootstrap's .btn-primary/.form-control etc. bake in their own hex
+       values rather than reading --bs-primary at the component level, so
+       the brand teal is applied directly to each one used in this app. */
+    .btn-primary {
+      --bs-btn-bg: var(--brand-teal); --bs-btn-border-color: var(--brand-teal);
+      --bs-btn-hover-bg: var(--brand-teal-dark); --bs-btn-hover-border-color: var(--brand-teal-dark);
+      --bs-btn-active-bg: var(--brand-teal-dark); --bs-btn-active-border-color: var(--brand-teal-dark);
+      --bs-btn-disabled-bg: var(--brand-teal); --bs-btn-disabled-border-color: var(--brand-teal);
+      --bs-btn-focus-shadow-rgb: 2,103,84;
+    }
+    .btn-outline-primary {
+      --bs-btn-color: var(--brand-teal); --bs-btn-border-color: var(--brand-teal);
+      --bs-btn-hover-bg: var(--brand-teal); --bs-btn-hover-border-color: var(--brand-teal);
+      --bs-btn-active-bg: var(--brand-teal); --bs-btn-active-border-color: var(--brand-teal);
+      --bs-btn-focus-shadow-rgb: 2,103,84;
+    }
+    .bg-primary { background-color: var(--brand-teal) !important; }
+    .text-primary { color: var(--brand-teal) !important; }
+    .form-control:focus, .form-select:focus {
+      border-color: var(--brand-teal);
+      box-shadow: 0 0 0 .25rem rgba(2,103,84,.25);
+    }
+    .form-check-input:checked { background-color: var(--brand-teal); border-color: var(--brand-teal); }
+    .form-check-input:focus { border-color: var(--brand-teal); box-shadow: 0 0 0 .25rem rgba(2,103,84,.25); }
   </style>
 </head>
 <body>
@@ -35,6 +80,7 @@ const isActive = (href) => pathMatches(href) ? ' active' : '';
 // "Transactions" link needs to recognize all three URL prefixes as itself.
 const isTransactionsHubActive = ['/admin/transactions', '/admin/import', '/admin/reports'].some(pathMatches) ? ' active' : '';
 %>
+<% if (typeof hide_nav === 'undefined' || !hide_nav) { %>
 <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom mb-4">
   <div class="container-fluid px-4">
     <a class="navbar-brand" href="/">Spend Tracker</a>
@@ -47,8 +93,8 @@ const isTransactionsHubActive = ['/admin/transactions', '/admin/import', '/admin
           <% if (currentUser.is_admin) { %>
             <li class="nav-item"><a class="nav-link<%= currentPath === '/admin' ? ' active' : '' %>" href="/admin">Dashboard</a></li>
             <li class="nav-item"><a class="nav-link<%= isTransactionsHubActive %>" href="/admin/transactions">Transactions</a></li>
-            <li class="nav-item"><a class="nav-link<%= isActive('/admin/forecast') %>" href="/admin/forecast">Forecast</a></li>
             <li class="nav-item"><a class="nav-link<%= isActive('/marketing') %>" href="/marketing">Marketing &amp; ROI</a></li>
+            <li class="nav-item"><a class="nav-link<%= isActive('/admin/employees') %>" href="/admin/employees/roi">Employee ROI</a></li>
             <li class="nav-item"><a class="nav-link<%= isActive('/admin/settings') %>" href="/admin/settings">Settings</a></li>
           <% } else { %>
             <li class="nav-item"><a class="nav-link<%= isActive('/submit') %>" href="/submit">Submit Expense</a></li>
@@ -60,6 +106,7 @@ const isTransactionsHubActive = ['/admin/transactions', '/admin/import', '/admin
       <ul class="navbar-nav">
         <% if (currentUser.is_authenticated) { %>
           <li class="nav-item"><span class="nav-link text-muted"><%= currentUser.name %> (<%= currentUser.role %>)</span></li>
+          <li class="nav-item"><a class="nav-link<%= isActive('/account/security') %>" href="/account/security">Security</a></li>
           <li class="nav-item"><a class="nav-link" href="/logout">Log out</a></li>
         <% } else { %>
           <li class="nav-item"><a class="nav-link" href="/login">Log in</a></li>
@@ -69,6 +116,7 @@ const isTransactionsHubActive = ['/admin/transactions', '/admin/import', '/admin
     </div>
   </div>
 </nav>
+<% } %>
 
 <div class="container-fluid px-4 pb-5" style="max-width:1400px;">
   <% if (typeof messages !== 'undefined' && messages.length) { %>

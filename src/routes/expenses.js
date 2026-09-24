@@ -4,6 +4,8 @@ const path = require('path');
 
 const db = require('../db');
 const extraction = require('../lib/extraction');
+const { OLLAMA_ENABLED } = require('../lib/aiClassify');
+const { findDuplicates } = require('../lib/duplicates');
 const { extOf, secureFilename } = require('../lib/util');
 const { RECEIPTS_DIR, ALLOWED_RECEIPT_EXT, upload } = require('../lib/uploads');
 const { requireAuth, flash } = require('../middleware/auth');
@@ -25,6 +27,21 @@ function getRequiredFields() {
 }
 
 const listCategories = db.prepare('SELECT * FROM categories ORDER BY name');
+const listTags = db.prepare(
+  'SELECT tags.id, tags.name, c.name AS category_name FROM tags JOIN categories c ON c.id = tags.category_id ORDER BY c.name, tags.name'
+);
+const findTagByName = db.prepare('SELECT * FROM tags WHERE name = ?');
+const insertTag = db.prepare('INSERT INTO tags (name, category_id) VALUES (?, ?)');
+const linkTag = db.prepare('INSERT OR IGNORE INTO transaction_tags (transaction_id, tag_id) VALUES (?, ?)');
+function findOrCreateTag(name, categoryId) {
+  if (!name) return null;
+  let tag = findTagByName.get(name);
+  if (!tag) {
+    const info = insertTag.run(name, categoryId);
+    tag = { id: info.lastInsertRowid, name, category_id: categoryId };
+  }
+  return tag;
+}
 const listVendors = db.prepare('SELECT * FROM vendors ORDER BY name');
 const findVendorByName = db.prepare('SELECT * FROM vendors WHERE name = ?');
 const insertVendor = db.prepare('INSERT INTO vendors (name) VALUES (?)');
@@ -59,9 +76,11 @@ router.get('/submit', requireAuth, (req, res) => {
   res.render('submit_expense', {
     title: 'Submit Expense',
     categories: listCategories.all(),
+    tags: listTags.all(),
     vendors: listVendors.all(),
     extracted: null,
     required_fields: getRequiredFields(),
+    ai_enabled: OLLAMA_ENABLED,
   });
 });
 
@@ -79,15 +98,23 @@ router.post('/submit', requireAuth, upload.single('receipt'), async (req, res) =
       const ftype = extOf(fname) === 'pdf' ? 'pdf' : 'image';
       extracted = await extraction.extractFromDocument(destPath, ftype);
       extracted.receipt_path = `receipts/${fname}`;
+      extracted.duplicate_of = findDuplicates({
+        date: extracted.date,
+        description: extracted.description,
+        amount: extracted.amount,
+        vendor: extracted.vendor,
+      });
     } else {
       flash(req, 'warning', 'Please attach a PNG, JPG, or PDF receipt to extract.');
     }
     return res.render('submit_expense', {
       title: 'Submit Expense',
       categories,
+      tags: listTags.all(),
       extracted,
       vendors: listVendors.all(),
       required_fields: requiredFields,
+      ai_enabled: OLLAMA_ENABLED,
     });
   }
 
@@ -124,15 +151,17 @@ router.post('/submit', requireAuth, upload.single('receipt'), async (req, res) =
     return res.render('submit_expense', {
       title: 'Submit Expense',
       categories,
+      tags: listTags.all(),
       extracted: null,
       vendors: listVendors.all(),
       required_fields: requiredFields,
+      ai_enabled: OLLAMA_ENABLED,
     });
   }
 
   const vendor = vendorName ? findOrCreateVendor(vendorName) : null;
 
-  insertTransaction.run({
+  const txInfo = insertTransaction.run({
     date: dateStr,
     amount,
     description,
@@ -141,13 +170,20 @@ router.post('/submit', requireAuth, upload.single('receipt'), async (req, res) =
     quantity: Number.isFinite(quantity) ? quantity : null,
     category_id: parseInt(categoryId, 10),
     vendor_id: vendor ? vendor.id : null,
-    employee_id: req.currentUser.id,
+    employee_id: db.getOrCreateEmployeeForUser(req.currentUser.id),
     is_one_time: isOneTime ? 1 : 0,
     source: SOURCE_EXPENSE_REPORT,
     status: STATUS_PENDING,
     submitted_by_id: req.currentUser.id,
     receipt_path: receiptPath,
   });
+
+  const tagNamesRaw = req.body.tag;
+  const tagNames = Array.isArray(tagNamesRaw) ? tagNamesRaw : tagNamesRaw ? [tagNamesRaw] : [];
+  for (const tagName of tagNames) {
+    const tag = findOrCreateTag(tagName, parseInt(categoryId, 10));
+    if (tag) linkTag.run(txInfo.lastInsertRowid, tag.id);
+  }
 
   flash(req, 'success', 'Expense report submitted for approval.');
   res.redirect('/my-reports');

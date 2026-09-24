@@ -1,0 +1,71 @@
+<%- include('partials/head', { title: employee.name + ' — ROI' }) %>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h3 class="mb-0"><%= employee.name %> — ROI</h3>
+  <a href="/admin/employees/roi" class="btn btn-outline-secondary btn-sm">&larr; All Employees</a>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3"><div class="stat-tile"><div class="label">Direct Spend</div><div class="value">$<%= fmtMoney(roi.directInvestment) %></div></div></div>
+  <div class="col-md-3"><div class="stat-tile"><div class="label">Event Costs</div><div class="value">$<%= fmtMoney(roi.eventInvestment) %></div></div></div>
+  <div class="col-md-3"><div class="stat-tile"><div class="label">Total Returned</div><div class="value">$<%= fmtMoney(roi.returned) %></div>
+    <div class="small text-muted">$<%= fmtMoney(roi.manualReturned) %> logged + $<%= fmtMoney(roi.eventReturnShare) %> from events</div>
+  </div></div>
+  <div class="col-md-3"><div class="stat-tile"><div class="label">Net</div><div class="value <%= roi.net >= 0 ? 'text-success' : 'text-danger' %>">$<%= fmtMoney(roi.net) %></div></div></div>
+</div>
+
+<div class="row g-3">
+  <div class="col-md-6">
+    <div class="card p-3 mb-3">
+      <h6>Professional Development / Team Engagement Spend</h6>
+      <table class="table table-sm mb-0">
+        <thead><tr><th>Date</th><th>What</th><th>Category</th><th class="text-end">Amount</th></tr></thead>
+        <tbody>
+        <% if (transactions.length === 0) { %><tr><td colspan="4" class="text-muted text-center">None yet.</td></tr><% } %>
+        <% transactions.forEach(function (t) { %>
+          <tr><td><%= fmtDate(t.date) %></td><td><%= t.description %></td><td><span class="badge bg-secondary"><%= t.category_name %></span></td><td class="text-end">$<%= fmtMoney(t.amount) %></td></tr>
+        <% }) %>
+        </tbody>
+      </table>
+    </div>
+    <div class="card p-3">
+      <h6>Events Attended</h6>
+      <p class="text-muted small mb-2">Each event's <a href="/marketing" class="text-decoration-none">logged outcome value</a> is split evenly across everyone who attended -- that's the "Return" column here.</p>
+      <table class="table table-sm mb-0">
+        <thead><tr><th>Date</th><th>Event</th><th class="text-end">Cost</th><th class="text-end">Return (share)</th></tr></thead>
+        <tbody>
+        <% if (events.length === 0) { %><tr><td colspan="4" class="text-muted text-center">None yet.</td></tr><% } %>
+        <% events.forEach(function (e) { %>
+          <tr><td><%= fmtDate(e.date) %></td><td><a href="/marketing/<%= e.id %>"><%= e.name %></a></td><td class="text-end">$<%= fmtMoney(e.cost) %></td><td class="text-end">$<%= fmtMoney(e.return_share) %><% if (e.attendee_count > 1) { %><div class="small text-muted">of $<%= fmtMoney(e.outcome_value) %> ÷ <%= e.attendee_count %></div><% } %></td></tr>
+        <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="col-md-6">
+    <div class="card p-3">
+      <h6>Manually Logged Returns</h6>
+      <p class="text-muted small mb-2">Anything else worth crediting them for -- a deal closed, a referral, a skill applied on the job -- that isn't already captured by an event's outcome value above.</p>
+      <table class="table table-sm">
+        <thead><tr><th>Date</th><th>Description</th><th class="text-end">Value</th></tr></thead>
+        <tbody>
+        <% if (returns.length === 0) { %><tr><td colspan="3" class="text-muted text-center">Nothing logged yet.</td></tr><% } %>
+        <% returns.forEach(function (r) { %>
+          <tr><td><%= fmtDate(r.date_logged) %></td><td><%= r.description %><% if (r.notes) { %><div class="small text-muted"><%= r.notes %></div><% } %></td><td class="text-end">$<%= fmtMoney(r.estimated_value) %></td></tr>
+        <% }) %>
+        </tbody>
+      </table>
+      <button class="btn btn-outline-primary btn-sm" data-bs-toggle="collapse" data-bs-target="#return-form">+ Log Return</button>
+      <div class="collapse mt-2" id="return-form">
+        <form method="post" action="/admin/employees/<%= employee.id %>/returns">
+          <div class="mb-2"><input type="text" name="description" class="form-control form-control-sm" placeholder="e.g. Led OSHA training that reduced incidents, applied new cert to close a bid" required></div>
+          <div class="mb-2"><input type="number" step="0.01" name="estimated_value" class="form-control form-control-sm" placeholder="Estimated $ value (optional)"></div>
+          <div class="mb-2"><input type="date" name="date_logged" class="form-control form-control-sm"></div>
+          <div class="mb-2"><textarea name="notes" class="form-control form-control-sm" placeholder="Notes" rows="2"></textarea></div>
+          <button class="btn btn-primary btn-sm w-100">Save</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+<%- include('partials/foot') %>

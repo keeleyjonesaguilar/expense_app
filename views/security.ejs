@@ -1,0 +1,22 @@
+<%- include('partials/head', { title: 'Account Security' }) %>
+<h3 class="mb-3">Account Security</h3>
+
+<div class="card p-4" style="max-width:600px;">
+  <h6 class="text-muted">Two-Factor Authentication</h6>
+  <% if (currentUser.totp_enabled) { %>
+    <p class="mb-3"><span class="badge badge-approved">Enabled</span> Your account requires a code from your authenticator app to log in.</p>
+    <form method="post" action="/account/security/disable" class="row g-2 align-items-end" style="max-width:420px;">
+      <div class="col-md-8">
+        <label class="form-label small mb-0">Enter your password to disable</label>
+        <input type="password" name="password" class="form-control" required>
+      </div>
+      <div class="col-md-4"><button class="btn btn-outline-danger w-100">Disable</button></div>
+    </form>
+  <% } else { %>
+    <p class="text-muted mb-3">Add a second step to log in -- a 6-digit code from an authenticator app (Microsoft Authenticator, Google Authenticator, etc.), on top of your password.</p>
+    <form method="post" action="/account/security/enable">
+      <button class="btn btn-primary">Set Up Two-Factor Auth</button>
+    </form>
+  <% } %>
+</div>
+<%- include('partials/foot') %>

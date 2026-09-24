@@ -1,7 +1,10 @@
 <%- include('partials/head', { title: 'Marketing & ROI' }) %>
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h3>Marketing &amp; Networking ROI</h3>
-  <a href="/marketing/new" class="btn btn-primary">+ Log New Event</a>
+  <div>
+    <% if (currentUser.is_admin) { %><a href="/marketing/import" class="btn btn-outline-secondary">Import Events</a><% } %>
+    <a href="/marketing/new" class="btn btn-primary">+ Log New Event</a>
+  </div>
 </div>
 
 <div class="row g-3 mb-4">

@@ -26,6 +26,21 @@
   <div class="col-md-4"><div class="stat-tile"><div class="label">One-Time Spend</div><div class="value">$<%= fmtMoney(onetime_total) %></div></div></div>
 </div>
 
+<% if (spend_by_kind && spend_by_kind.length) { %>
+<div class="card p-3 mb-4">
+  <h6>Spend by Type — Fixed vs. Discretionary</h6>
+  <p class="text-muted small">How much of total spend is committed/predictable versus controllable, based on each category's assigned type (Settings &rarr; Categories).</p>
+  <table class="table table-sm mb-0">
+    <thead><tr><th>Type</th><th class="text-end">Total Spend</th><th class="text-end">% of Total</th></tr></thead>
+    <tbody>
+      <% spend_by_kind.forEach(function (pair) { %>
+      <tr><td><%= pair[0] %></td><td class="text-end">$<%= fmtMoney(pair[1]) %></td><td class="text-end"><%= total_spend ? (pair[1] / total_spend * 100).toFixed(1) : '0.0' %>%</td></tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+<% } %>
+
 <div class="card p-3 mb-4">
   <h6>Spend by Category</h6>
   <table class="table table-sm mb-0">
@@ -37,6 +52,26 @@
     </tbody>
   </table>
 </div>
+
+<% if (spend_by_tag && spend_by_tag.size) { %>
+<div class="card p-3 mb-4">
+  <h6>Spend by Category &amp; Tag</h6>
+  <div class="row g-3">
+    <% spend_by_tag.forEach(function (tagRows, categoryName) { %>
+      <div class="col-md-6">
+        <div class="small text-muted text-uppercase mb-1" style="letter-spacing:.03em;"><%= categoryName %></div>
+        <table class="table table-sm mb-0">
+          <tbody>
+            <% tagRows.forEach(function (pair) { %>
+            <tr><td><%= pair[0] %></td><td class="text-end">$<%= fmtMoney(pair[1]) %></td></tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    <% }) %>
+  </div>
+</div>
+<% } %>
 
 <% if (year_over_year && year_over_year.length) { %>
 <div class="card p-3 mb-4">
@@ -51,6 +86,20 @@
         <td class="text-end">$<%= fmtMoney(row.curr) %></td>
         <td class="text-end"><%= row.change > 0 ? '+$' + fmtMoney(row.change) : row.change < 0 ? '-$' + fmtMoney(-row.change) : '$' + fmtMoney(0) %></td>
       </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+<% } %>
+
+<% if (by_employee && by_employee.length) { %>
+<div class="card p-3 mb-4">
+  <h6>Spend by Person</h6>
+  <table class="table table-sm mb-0">
+    <thead><tr><th>Person</th><th class="text-end">Total Spend</th></tr></thead>
+    <tbody>
+      <% by_employee.forEach(function (pair) { %>
+      <tr><td><%= pair[0] %></td><td class="text-end">$<%= fmtMoney(pair[1]) %></td></tr>
       <% }) %>
     </tbody>
   </table>

@@ -2,7 +2,10 @@
 <h3 class="mb-3">Submit an Expense Report</h3>
 
 <div class="card p-4 mb-4">
-  <h6 class="text-muted">Step 1 (optional): attach a receipt to auto-fill the form</h6>
+  <h6 class="text-muted">
+    Step 1 (optional): attach a receipt to auto-fill the form
+    <% if (ai_enabled) { %><span class="badge bg-primary ms-1">AI-Powered</span><% } %>
+  </h6>
   <form method="post" enctype="multipart/form-data" class="row g-2 align-items-end">
     <div class="col-md-8">
       <input type="file" name="receipt" class="form-control" accept=".png,.jpg,.jpeg,.pdf">
@@ -11,7 +14,18 @@
       <button type="submit" name="extract_only" value="1" class="btn btn-outline-primary w-100">Scan Receipt</button>
     </div>
   </form>
-  <p class="small text-muted mt-2 mb-0">We'll try to read the date, amount, vendor, and category off the receipt — always double-check before submitting, extraction isn't perfect.</p>
+  <% if (ai_enabled) { %>
+    <p class="small text-muted mt-2 mb-0">A local AI model reads the whole receipt image — vendor, date, amount, and category (even suggesting a brand-new category when nothing existing fits). Nothing is saved yet: Step 2 below always requires your review before anything is submitted.</p>
+  <% } else { %>
+    <p class="small text-muted mt-2 mb-0">We'll try to read the date, amount, vendor, and category off the receipt — always double-check before submitting, extraction isn't perfect.</p>
+  <% } %>
+</div>
+
+  <% if (extracted && extracted.duplicate_of && extracted.duplicate_of.length) { %>
+    <div class="alert alert-danger mt-3 mb-0">
+      Possible duplicate — an existing transaction on <%= extracted.date %> already has the same item text (#<%= extracted.duplicate_of.map(function(d){return d.id;}).join(', #') %>). Double-check this isn't the same receipt submitted twice before continuing.
+    </div>
+  <% } %>
 </div>
 
 <div class="card p-4">
@@ -37,7 +51,35 @@
             <option value="<%= c.id %>" <%= extracted && extracted.suggested_category === c.name ? 'selected' : '' %>><%= c.name %></option>
           <% }) %>
         </select>
+        <% if (extracted && extracted.suggested_event_type) { %>
+          <div class="small text-muted mt-1">
+            AI flags this as <strong><%= extracted.suggested_event_type %></strong>-type spend.
+            <a target="_blank" href="/marketing/new?prefill_name=<%= encodeURIComponent(extracted.vendor || extracted.description || '') %>&prefill_type=<%= encodeURIComponent(extracted.suggested_event_type) %>&prefill_cost=<%= encodeURIComponent(extracted.amount || '') %>&prefill_date=<%= encodeURIComponent(extracted.date || '') %>">Log it in Marketing &amp; ROI &rarr;</a>
+          </div>
+        <% } %>
       </div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Tags <span class="text-muted small">(optional, pick any that fit)</span></label>
+      <div class="d-flex flex-wrap gap-3">
+        <% tags.forEach(function (t) { %>
+          <div class="form-check">
+            <input type="checkbox" class="form-check-input" name="tag" value="<%= t.name %>" id="tag-<%= t.id %>"
+              <%= extracted && extracted.tags && extracted.tags.some(function (et) { return et.name === t.name; }) ? 'checked' : '' %>>
+            <label class="form-check-label small" for="tag-<%= t.id %>"><%= t.name %> <span class="text-muted">(<%= t.category_name %>)</span></label>
+          </div>
+        <% }) %>
+        <% if (extracted && extracted.tags) { %>
+          <% extracted.tags.filter(function (et) { return et.is_new; }).forEach(function (et) { %>
+            <div class="form-check">
+              <input type="checkbox" class="form-check-input" name="tag" value="<%= et.name %>" checked id="newtag-<%= et.name %>">
+              <label class="form-check-label small" for="newtag-<%= et.name %>"><%= et.name %> <span class="badge bg-primary">new</span></label>
+            </div>
+          <% }) %>
+        <% } %>
+      </div>
+    </div>
+    <div class="row">
       <div class="col-md-4 mb-3">
         <label class="form-label">Quantity<%= required_fields.includes('quantity') ? ' *' : ' (optional)' %></label>
         <input type="number" step="any" name="quantity" class="form-control" <%= required_fields.includes('quantity') ? 'required' : '' %>
@@ -87,11 +129,13 @@
 const extraScripts = `
 <script>
 (function () {
-  var categorySelect = document.getElementById('category_id');
   var oneTimeCheckbox = document.getElementById('one_time');
-  categorySelect.addEventListener('change', function () {
-    var text = categorySelect.options[categorySelect.selectedIndex].text;
-    if (text === 'Events') oneTimeCheckbox.checked = true;
+  var eventTagValues = ['Events', 'Conferences', 'Sponsorships'];
+  document.querySelectorAll('input[name="tag"]').forEach(function (box) {
+    if (eventTagValues.indexOf(box.value) === -1) return;
+    box.addEventListener('change', function () {
+      if (box.checked) oneTimeCheckbox.checked = true;
+    });
   });
 })();
 </script>

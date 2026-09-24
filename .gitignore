@@ -1,6 +1,10 @@
 # Node
 node_modules/
 npm-debug.log*
+*.log
+
+# Tesseract OCR language data (auto-downloaded on first use)
+eng.traineddata
 
 # Database (local dev data -- never commit real spend/employee data)
 instance/*.db

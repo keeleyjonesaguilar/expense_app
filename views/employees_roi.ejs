@@ -1,0 +1,26 @@
+<%- include('partials/head', { title: 'Employee ROI' }) %>
+<h3 class="mb-3">Employee ROI</h3>
+<p class="text-muted">What's been invested in each person (Professional Development spend, Team Engagement/Employee Retention spend, and events they've attended) against what's been logged as a return. This is an input for eval/comp conversations, not an automated score -- read the detail page before drawing a conclusion from the number alone.</p>
+
+<div class="card">
+<table class="table table-sm mb-0">
+  <thead class="table-light">
+    <tr><th>Employee</th><th class="text-end">Invested</th><th class="text-end">Returned</th><th class="text-end">Net</th><th></th></tr>
+  </thead>
+  <tbody>
+    <% if (employees.length === 0) { %>
+    <tr><td colspan="5" class="text-center text-muted py-4">No employees yet.</td></tr>
+    <% } %>
+    <% employees.forEach(function (e) { %>
+    <tr>
+      <td><%= e.name %></td>
+      <td class="text-end">$<%= fmtMoney(e.invested) %></td>
+      <td class="text-end">$<%= fmtMoney(e.returned) %></td>
+      <td class="text-end <%= e.net >= 0 ? 'text-success' : 'text-danger' %> fw-bold">$<%= fmtMoney(e.net) %></td>
+      <td><a href="/admin/employees/<%= e.id %>/roi" class="btn btn-outline-secondary btn-sm">Details</a></td>
+    </tr>
+    <% }) %>
+  </tbody>
+</table>
+</div>
+<%- include('partials/foot') %>

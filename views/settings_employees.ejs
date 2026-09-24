@@ -1,0 +1,47 @@
+<%- include('partials/head', { title: 'Settings — Employees' }) %>
+<%- include('partials/settings_nav', { active: 'employees' }) %>
+
+<p class="text-muted small" style="max-width:700px;">
+  The roster spend, event attendance, and ROI get attributed to. Separate from <a href="/admin/settings/users">Users</a> --
+  most employees here never log into the app. Someone with a login (Settings &rarr; Users) automatically gets a matching
+  entry here too.
+</p>
+
+<div class="card p-3 mb-4">
+  <h6>Add Employee</h6>
+  <form method="post" action="/admin/settings/employees" class="row g-2 align-items-end">
+    <div class="col-md-4"><label class="form-label small mb-0">Name</label><input type="text" name="name" class="form-control form-control-sm" required></div>
+    <div class="col-md-4"><label class="form-label small mb-0">Department</label><input type="text" name="department" class="form-control form-control-sm"></div>
+    <div class="col-md-4"><button class="btn btn-primary btn-sm">Add Employee</button></div>
+  </form>
+</div>
+
+<div class="card">
+<table class="table table-sm mb-0">
+  <thead class="table-light"><tr><th>Name</th><th>Department</th><th>Login</th><th>Status</th><th></th><th></th></tr></thead>
+  <tbody>
+    <% if (employees.length === 0) { %>
+    <tr><td colspan="6" class="text-center text-muted py-4">No employees yet.</td></tr>
+    <% } %>
+    <% employees.forEach(function (e) { %>
+    <tr class="<%= e.active ? '' : 'text-muted' %>">
+      <form method="post" action="/admin/settings/employees/<%= e.id %>/update" id="ef<%= e.id %>"></form>
+      <td><input type="text" name="name" form="ef<%= e.id %>" value="<%= e.name %>" class="form-control form-control-sm" style="width:160px" required></td>
+      <td><input type="text" name="department" form="ef<%= e.id %>" value="<%= e.department || '' %>" class="form-control form-control-sm" style="width:140px"></td>
+      <td><%= e.user_email || '—' %></td>
+      <td><% if (e.active) { %><span class="badge bg-success">Active</span><% } else { %><span class="badge bg-secondary">Deactivated</span><% } %></td>
+      <td><button class="btn btn-outline-secondary btn-sm" form="ef<%= e.id %>">Save</button></td>
+      <td class="text-end">
+        <% if (e.active) { %>
+          <button type="button" class="btn btn-outline-warning btn-sm" onclick="openConfirmModal({action:'/admin/settings/employees/<%= e.id %>/deactivate', title:'Deactivate Employee', body:'Hide <%= e.name %> from new spend/event assignments. Their history stays exactly as it is, and this can be undone.', word:'deactivate', submitLabel:'Deactivate', submitClass:'btn-warning'})">Deactivate</button>
+        <% } else { %>
+          <form method="post" action="/admin/settings/employees/<%= e.id %>/reactivate" class="d-inline"><button class="btn btn-outline-success btn-sm">Reactivate</button></form>
+        <% } %>
+        <button type="button" class="btn btn-outline-danger btn-sm" <%- (e.tx_count > 0 || e.event_count > 0 || e.return_count > 0 || e.user_id) ? `disabled title="${e.user_id ? 'Linked to a login' : 'Has recorded history'} -- deactivate instead"` : `onclick="openConfirmModal({action:'/admin/settings/employees/${e.id}/delete', title:'Delete Employee', body:'Permanently delete ${e.name.replace(/'/g, "\\'")}. This cannot be undone.', word:'delete', submitLabel:'Delete Employee'})"` %>>Delete</button>
+      </td>
+    </tr>
+    <% }) %>
+  </tbody>
+</table>
+</div>
+<%- include('partials/foot') %>

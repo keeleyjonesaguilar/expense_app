@@ -21,10 +21,10 @@
 
 <div class="card">
 <table class="table table-sm mb-0">
-  <thead class="table-light"><tr><th>Name</th><th>Email</th><th>Department</th><th>Role</th><th></th></tr></thead>
+  <thead class="table-light"><tr><th>Name</th><th>Email</th><th>Department</th><th>Role</th><th>Status</th><th></th><th></th></tr></thead>
   <tbody>
     <% users.forEach(function (u) { %>
-    <tr>
+    <tr class="<%= u.active ? '' : 'text-muted' %>">
       <form method="post" action="/admin/settings/users/<%= u.id %>/update" id="uf<%= u.id %>"></form>
       <td><%= u.name %></td>
       <td><%= u.email %></td>
@@ -35,11 +35,20 @@
           <option value="admin" <%= u.role === 'admin' ? 'selected' : '' %>>Admin</option>
         </select>
       </td>
+      <td><% if (u.active) { %><span class="badge bg-success">Active</span><% } else { %><span class="badge bg-secondary">Deactivated</span><% } %></td>
       <td><button class="btn btn-outline-secondary btn-sm" form="uf<%= u.id %>">Save</button></td>
+      <td class="text-end">
+        <% if (u.active) { %>
+          <button type="button" class="btn btn-outline-warning btn-sm" onclick="openConfirmModal({action:'/admin/settings/users/<%= u.id %>/deactivate', title:'Deactivate User', body:'<%= u.name %> will no longer be able to log in. This can be undone.', word:'deactivate', submitLabel:'Deactivate', submitClass:'btn-warning'})">Deactivate</button>
+        <% } else { %>
+          <form method="post" action="/admin/settings/users/<%= u.id %>/reactivate" class="d-inline"><button class="btn btn-outline-success btn-sm">Reactivate</button></form>
+        <% } %>
+        <button type="button" class="btn btn-outline-danger btn-sm" onclick="openConfirmModal({action:'/admin/settings/users/<%= u.id %>/delete', title:'Delete User', body:'Permanently delete the login for <%= u.name %>. Blocked if they have any submissions, approvals, or logged activity on record -- deactivate instead in that case.', word:'delete', submitLabel:'Delete User'})">Delete</button>
+      </td>
     </tr>
     <% }) %>
   </tbody>
 </table>
 </div>
-<p class="text-muted small mt-2">Users can't be deleted here — removing one would orphan the transactions they submitted or incurred.</p>
+<p class="text-muted small mt-2">Deleting a user is only allowed when they have no history on record (nothing submitted, approved, or logged) -- deactivate covers everyone else.</p>
 <%- include('partials/foot') %>

@@ -1,6 +1,15 @@
-<%- include('partials/head', { title: 'Request Supplies' }) %>
+<%- include('partials/head', { title: 'Request Supplies', hide_nav: true }) %>
 <h3 class="mb-3">Request Supplies</h3>
-<p class="text-muted"><%= intro_text %></p>
+
+<div class="btn-group mb-3" role="group" aria-label="Request type">
+  <input type="radio" class="btn-check" name="request_type_picker" id="type-supplies" checked>
+  <label class="btn btn-outline-primary" for="type-supplies">Office Supplies</label>
+  <input type="radio" class="btn-check" name="request_type_picker" id="type-event">
+  <label class="btn btn-outline-primary" for="type-event">Event / Professional Development</label>
+</div>
+
+<p class="text-muted" id="intro-supplies"><%= intro_text %></p>
+<p class="text-muted d-none" id="intro-event"><%= event_intro_text %></p>
 
 <% if (submitted) { %>
 <div class="alert alert-success">Thanks — your request has been submitted for approval.</div>
@@ -8,6 +17,7 @@
 
 <div class="card p-4" style="max-width: 640px;">
   <form method="post" id="request-form">
+    <input type="hidden" name="request_type" id="request_type" value="supplies">
     <div class="row">
       <div class="col-md-6 mb-3">
         <label class="form-label">Your Name *</label>
@@ -18,32 +28,72 @@
         <input type="text" name="department" class="form-control">
       </div>
     </div>
+
     <div class="mb-3">
-      <label class="form-label">What do you need? *</label>
-      <input type="text" name="item" class="form-control" placeholder="e.g. box of blue pens, replacement keyboard" required>
+      <label class="form-label" id="item-label">What do you need? *</label>
+      <input type="text" name="item" id="item" class="form-control" placeholder="e.g. box of blue pens, replacement keyboard" required>
     </div>
-    <div class="row">
-      <div class="col-md-6 mb-3">
+
+    <div id="supplies-fields">
+      <div class="mb-3">
+        <label class="form-label">Category</label>
+        <div><span class="badge text-bg-light border"><%= office_category ? office_category.name : 'Office Expenses' %></span></div>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Type of supply (optional)</label>
+        <div class="d-flex flex-wrap gap-3">
+          <% tags.filter(function (t) { return office_category && t.category_id === office_category.id; }).forEach(function (t) { %>
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="tag_id" value="<%= t.id %>" id="tag-<%= t.id %>">
+            <label class="form-check-label" for="tag-<%= t.id %>"><%= t.name %></label>
+          </div>
+          <% }) %>
+        </div>
+      </div>
+      <div class="row">
+        <div class="col-md-6 mb-3">
+          <label class="form-label">Quantity</label>
+          <input type="number" step="any" name="quantity" class="form-control">
+        </div>
+      </div>
+    </div>
+
+    <div id="event-fields" class="d-none">
+      <div class="mb-3">
         <label class="form-label">Category *</label>
-        <select name="category_id" id="category_id" class="form-select" required>
+        <select name="category_id" id="event_category_id" class="form-select">
           <option value="">Choose...</option>
-          <% categories.forEach(function (c) { %><option value="<%= c.id %>"><%= c.name %></option><% }) %>
+          <% event_categories.forEach(function (c) { %><option value="<%= c.id %>"><%= c.name %></option><% }) %>
         </select>
       </div>
-      <div class="col-md-6 mb-3">
-        <label class="form-label">Quantity</label>
-        <input type="number" step="any" name="quantity" class="form-control">
+      <div class="mb-3">
+        <label class="form-label">Type (optional)</label>
+        <div class="d-flex flex-wrap gap-3">
+          <% event_categories.forEach(function (c) { %>
+            <% tags.filter(function (t) { return t.category_id === c.id; }).forEach(function (t) { %>
+            <div class="form-check event-tag-option d-none" data-category-id="<%= c.id %>">
+              <input class="form-check-input" type="checkbox" name="tag_id" value="<%= t.id %>" id="tag-<%= t.id %>">
+              <label class="form-check-label" for="tag-<%= t.id %>"><%= t.name %></label>
+            </div>
+            <% }) %>
+          <% }) %>
+        </div>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Date needed by (optional)</label>
+        <input type="date" name="event_date" class="form-control" style="max-width:220px">
       </div>
     </div>
+
     <div class="mb-3">
-      <label class="form-label">Link to the item (optional)</label>
+      <label class="form-label">Link (optional)</label>
       <input type="url" name="link" class="form-control" placeholder="https://...">
     </div>
     <div class="mb-3">
-      <label class="form-label">Anything else we should know?</label>
+      <label class="form-label" id="justification-label">Anything else we should know?</label>
       <textarea name="justification" class="form-control" rows="2" placeholder="e.g. why you need it, preferred brand, how soon"></textarea>
     </div>
-    <div class="form-check mb-3">
+    <div class="form-check mb-3" id="onetime-wrap">
       <input type="checkbox" class="form-check-input" name="is_one_time" id="is_one_time">
       <label class="form-check-label" for="is_one_time">This is a one-time purchase (not expected to recur)</label>
     </div>
@@ -53,15 +103,48 @@
 <%
 const extraScripts = `
 <script>
-// Events are almost always a one-off cost -- default the checkbox on when
-// that category is chosen, but leave it fully editable either way.
 (function () {
-  var categorySelect = document.getElementById('category_id');
-  var oneTimeCheckbox = document.getElementById('is_one_time');
-  categorySelect.addEventListener('change', function () {
-    var text = categorySelect.options[categorySelect.selectedIndex].text;
-    if (text === 'Events') oneTimeCheckbox.checked = true;
-  });
+  var supplyRadio = document.getElementById('type-supplies');
+  var eventRadio = document.getElementById('type-event');
+  var requestType = document.getElementById('request_type');
+  var suppliesFields = document.getElementById('supplies-fields');
+  var eventFields = document.getElementById('event-fields');
+  var introSupplies = document.getElementById('intro-supplies');
+  var introEvent = document.getElementById('intro-event');
+  var itemLabel = document.getElementById('item-label');
+  var justificationLabel = document.getElementById('justification-label');
+  var onetimeWrap = document.getElementById('onetime-wrap');
+  var onetimeCheckbox = document.getElementById('is_one_time');
+  var eventCategorySelect = document.getElementById('event_category_id');
+
+  function applyEventCategoryFilter() {
+    var selected = eventCategorySelect.value;
+    document.querySelectorAll('.event-tag-option').forEach(function (el) {
+      var show = el.dataset.categoryId === selected;
+      el.classList.toggle('d-none', !show);
+      if (!show) el.querySelector('input').checked = false;
+    });
+  }
+
+  function setMode(mode) {
+    var isEvent = mode === 'event';
+    requestType.value = mode;
+    suppliesFields.classList.toggle('d-none', isEvent);
+    eventFields.classList.toggle('d-none', !isEvent);
+    introSupplies.classList.toggle('d-none', isEvent);
+    introEvent.classList.toggle('d-none', !isEvent);
+    itemLabel.textContent = isEvent ? 'Event / program name *' : 'What do you need? *';
+    justificationLabel.textContent = isEvent
+      ? 'Why is this valuable? (goals, who\\'s attending, etc.)'
+      : 'Anything else we should know?';
+    onetimeWrap.classList.toggle('d-none', isEvent);
+    eventCategorySelect.required = isEvent;
+    if (isEvent) { onetimeCheckbox.checked = true; applyEventCategoryFilter(); }
+  }
+
+  supplyRadio.addEventListener('change', function () { if (supplyRadio.checked) setMode('supplies'); });
+  eventRadio.addEventListener('change', function () { if (eventRadio.checked) setMode('event'); });
+  eventCategorySelect.addEventListener('change', applyEventCategoryFilter);
 })();
 </script>
 `;

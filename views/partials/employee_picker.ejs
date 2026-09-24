@@ -1,0 +1,98 @@
+<%
+// Reusable searchable multi-select "chip" picker for choosing employees.
+// Usage: include this partial with { id: a unique DOM id, fieldName: the
+// form field name, employees: [{id,name}], selected_ids: [id, ...] }.
+// Renders one hidden input per selection -- the same repeated-same-name-
+// field wire format a checkbox list already produced, so no server-side
+// handler changes are needed to adopt this.
+%>
+<div class="employee-picker" id="<%= id %>" data-field="<%= fieldName %>">
+  <div class="d-flex flex-wrap gap-1 mb-2 employee-picker-chips"></div>
+  <div class="position-relative">
+    <input type="text" class="form-control form-control-sm employee-picker-input" placeholder="Search employees…" autocomplete="off">
+    <div class="list-group employee-picker-dropdown position-absolute w-100" style="z-index:1050; max-height:220px; overflow-y:auto; display:none; top:100%;"></div>
+  </div>
+</div>
+<script>
+(function () {
+  var root = document.getElementById('<%= id %>');
+  var all = <%- JSON.stringify(employees.map(function (e) { return { id: e.id, name: e.name }; })) %>;
+  var selected = <%- JSON.stringify(selected_ids || []) %>.slice();
+  var fieldName = root.dataset.field;
+  var chips = root.querySelector('.employee-picker-chips');
+  var input = root.querySelector('.employee-picker-input');
+  var dropdown = root.querySelector('.employee-picker-dropdown');
+
+  function escapeHtml(s) {
+    return String(s).replace(/[<>&]/g, function (c) { return { '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]; });
+  }
+
+  function employeeById(empId) { return all.find(function (e) { return e.id === empId; }); }
+
+  function render() {
+    chips.innerHTML = '';
+    root.querySelectorAll('input[type=hidden]').forEach(function (el) { el.remove(); });
+    selected.forEach(function (empId) {
+      var emp = employeeById(empId);
+      if (!emp) return;
+      var chip = document.createElement('span');
+      chip.className = 'badge bg-secondary d-inline-flex align-items-center';
+      chip.style.fontSize = '.85rem';
+      chip.style.gap = '.35rem';
+      var label = document.createElement('span');
+      label.textContent = emp.name;
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn-close btn-close-white';
+      btn.style.fontSize = '.55rem';
+      btn.setAttribute('aria-label', 'Remove ' + emp.name);
+      btn.addEventListener('click', function () {
+        selected = selected.filter(function (x) { return x !== empId; });
+        render();
+      });
+      chip.appendChild(label);
+      chip.appendChild(btn);
+      chips.appendChild(chip);
+
+      var hidden = document.createElement('input');
+      hidden.type = 'hidden';
+      hidden.name = fieldName;
+      hidden.value = empId;
+      root.appendChild(hidden);
+    });
+  }
+
+  function showDropdown(query) {
+    var q = query.trim().toLowerCase();
+    var matches = all
+      .filter(function (e) { return selected.indexOf(e.id) === -1 && (!q || e.name.toLowerCase().indexOf(q) !== -1); })
+      .slice(0, 8);
+    dropdown.innerHTML = '';
+    if (!matches.length) {
+      dropdown.style.display = 'none';
+      return;
+    }
+    matches.forEach(function (e) {
+      var item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'list-group-item list-group-item-action py-1 px-2';
+      item.textContent = e.name;
+      item.addEventListener('click', function () {
+        selected.push(e.id);
+        input.value = '';
+        dropdown.style.display = 'none';
+        render();
+        input.focus();
+      });
+      dropdown.appendChild(item);
+    });
+    dropdown.style.display = 'block';
+  }
+
+  input.addEventListener('input', function () { showDropdown(input.value); });
+  input.addEventListener('focus', function () { showDropdown(input.value); });
+  document.addEventListener('click', function (e) { if (!root.contains(e.target)) dropdown.style.display = 'none'; });
+
+  render();
+})();
+</script>

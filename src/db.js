@@ -3,7 +3,7 @@ const fs = require('fs');
 const Database = require('better-sqlite3');
 const bcrypt = require('bcryptjs');
 
-const { ESTABLISHED_CATEGORIES, DEFAULT_COLUMN_ALIASES } = require('./constants');
+const { ESTABLISHED_CATEGORIES, ESTABLISHED_TAGS, DEFAULT_COLUMN_ALIASES } = require('./constants');
 
 const BASE_DIR = path.join(__dirname, '..');
 
@@ -63,9 +63,25 @@ function createSchema() {
       password_hash TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'employee',
       department TEXT,
+      active INTEGER NOT NULL DEFAULT 1,
       created_at TEXT DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+
+    -- The roster of people spend/events/ROI get attributed to -- deliberately
+    -- separate from users (login accounts). Most employees never log in; a
+    -- few (admins, anyone submitting their own expense reports) also have a
+    -- user account, linked via user_id. See migrateEmployeeReferences() below
+    -- for how this was backfilled from the old users-only model.
+    CREATE TABLE IF NOT EXISTS employees (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      department TEXT,
+      active INTEGER NOT NULL DEFAULT 1,
+      user_id INTEGER REFERENCES users(id),
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_employees_user_unique ON employees(user_id) WHERE user_id IS NOT NULL;
 
     CREATE TABLE IF NOT EXISTS categories (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -73,6 +89,13 @@ function createSchema() {
       kind TEXT NOT NULL DEFAULT 'semi-variable',
       recurrence_basis TEXT NOT NULL DEFAULT 'recurring-monthly'
     );
+
+    CREATE TABLE IF NOT EXISTS tags (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      category_id INTEGER NOT NULL REFERENCES categories(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_tags_category ON tags(category_id);
 
     CREATE TABLE IF NOT EXISTS vendors (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -91,7 +114,7 @@ function createSchema() {
       unit_price REAL,
       category_id INTEGER REFERENCES categories(id),
       vendor_id INTEGER REFERENCES vendors(id),
-      employee_id INTEGER REFERENCES users(id),
+      employee_id INTEGER REFERENCES employees(id),
       is_one_time INTEGER DEFAULT 0,
       source TEXT DEFAULT 'manual',
       status TEXT DEFAULT 'approved',
@@ -108,6 +131,13 @@ function createSchema() {
     CREATE INDEX IF NOT EXISTS idx_transactions_employee ON transactions(employee_id);
     CREATE INDEX IF NOT EXISTS idx_transactions_submitted_by ON transactions(submitted_by_id);
     CREATE INDEX IF NOT EXISTS idx_transactions_status ON transactions(status);
+
+    CREATE TABLE IF NOT EXISTS transaction_tags (
+      transaction_id INTEGER NOT NULL REFERENCES transactions(id),
+      tag_id INTEGER NOT NULL REFERENCES tags(id),
+      PRIMARY KEY (transaction_id, tag_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_transaction_tags_tag ON transaction_tags(tag_id);
 
     CREATE TABLE IF NOT EXISTS uploads (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -160,6 +190,30 @@ function createSchema() {
     );
     CREATE INDEX IF NOT EXISTS idx_event_outcomes_event ON event_outcomes(event_id);
 
+    CREATE TABLE IF NOT EXISTS event_attendees (
+      event_id INTEGER NOT NULL REFERENCES marketing_events(id),
+      employee_id INTEGER NOT NULL REFERENCES employees(id),
+      PRIMARY KEY (event_id, employee_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_event_attendees_employee ON event_attendees(employee_id);
+
+    -- The "return" side of per-employee investment ROI (see
+    -- routes/employees.js): a manually-logged value or note an admin
+    -- attributes to an employee -- a deal closed, a referral, a skill
+    -- applied on the job -- weighed against what was invested in them
+    -- (Professional Development spend + Team Engagement events attended).
+    CREATE TABLE IF NOT EXISTS employee_returns (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      employee_id INTEGER NOT NULL REFERENCES employees(id),
+      description TEXT NOT NULL,
+      estimated_value REAL DEFAULT 0,
+      date_logged TEXT,
+      logged_by_id INTEGER REFERENCES users(id),
+      notes TEXT,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_employee_returns_employee ON employee_returns(employee_id);
+
     CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT
@@ -185,6 +239,24 @@ function seedCategories() {
     }
   });
   seedAll(ESTABLISHED_CATEGORIES);
+}
+
+// Same insert-if-missing, safe-on-every-boot pattern as seedCategories()
+// above, for tags. Must run after seedCategories() (each tag looks up its
+// parent category by name).
+function seedTags() {
+  const findCategory = db.prepare('SELECT id FROM categories WHERE name = ?');
+  const insert = db.prepare('INSERT INTO tags (name, category_id) VALUES (?, ?)');
+  const exists = db.prepare('SELECT 1 FROM tags WHERE name = ?');
+  const seedAll = db.transaction((rows) => {
+    for (const [name, categoryName] of rows) {
+      if (exists.get(name)) continue;
+      const category = findCategory.get(categoryName);
+      if (!category) continue; // established tag references a category that isn't seeded (shouldn't happen) -- skip rather than crash boot
+      insert.run(name, category.id);
+    }
+  });
+  seedAll(ESTABLISHED_TAGS);
 }
 
 // Ported from app.py create_app() lines ~72-91: on first boot, if no admin
@@ -279,6 +351,14 @@ addColumnIfMissing('transactions', 'ordered_at TEXT');
 addColumnIfMissing('categories', "recurrence_basis TEXT NOT NULL DEFAULT 'recurring-monthly'");
 addColumnIfMissing('categories', 'added_reason TEXT');
 addColumnIfMissing('transactions', 'upload_id INTEGER REFERENCES uploads(id)');
+// Two-factor auth (TOTP, e.g. Microsoft/Google Authenticator) -- secret is
+// only set once a user has confirmed enrollment by entering a live code
+// (see routes/security.js); totp_enabled gates whether login requires it.
+addColumnIfMissing('users', 'totp_secret TEXT');
+addColumnIfMissing('users', 'totp_enabled INTEGER NOT NULL DEFAULT 0');
+// Deactivating a user blocks login without deleting their row (which would
+// orphan everything they've submitted/approved/logged).
+addColumnIfMissing('users', 'active INTEGER NOT NULL DEFAULT 1');
 
 // Seed the bulk-import column-alias matcher's starting data, same
 // insert-if-missing pattern as seedCategories() below.
@@ -291,13 +371,80 @@ function seedColumnAliases() {
 }
 
 seedCategories();
+seedTags();
 seedColumnAliases();
 bootstrapAdmin();
+
+// One-time backfill from the old model (every "employee" was just a users
+// row) to the new one (a dedicated employees roster, users only for login
+// accounts). Employee rows are inserted with the SAME id as the user they
+// came from, so every existing transactions.employee_id / event_attendees.
+// employee_id / employee_returns.employee_id value already points at the
+// right person -- no remapping needed, just repointing which table those
+// columns reference. Gated by a settings flag so it only ever runs once;
+// safe to run again on a fresh/empty database too (no-ops cleanly).
+function recreateTableWithEmployeeFk(table) {
+  const row = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?").get(table);
+  if (!row) return;
+  const newSql = row.sql
+    .replace(new RegExp(`CREATE TABLE ${table}\\b`, 'i'), `CREATE TABLE ${table}_migrating`)
+    .replace(/employee_id(\s+INTEGER)(\s+NOT NULL)?\s+REFERENCES\s+users\s*\(\s*id\s*\)/i, (m, intType, notNull) =>
+      `employee_id${intType}${notNull || ''} REFERENCES employees(id)`
+    );
+  if (newSql === row.sql.replace(new RegExp(`CREATE TABLE ${table}\\b`, 'i'), `CREATE TABLE ${table}_migrating`)) {
+    // No "REFERENCES users(id)" found on employee_id -- already migrated or
+    // never pointed at users to begin with; nothing to do.
+    return;
+  }
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map((c) => c.name).join(', ');
+  db.exec(newSql);
+  db.exec(`INSERT INTO ${table}_migrating (${cols}) SELECT ${cols} FROM ${table};`);
+  db.exec(`DROP TABLE ${table};`);
+  db.exec(`ALTER TABLE ${table}_migrating RENAME TO ${table};`);
+}
+
+function migrateEmployeeReferences() {
+  if (getSetting('employees_migrated', null)) return;
+
+  db.pragma('foreign_keys = OFF');
+  const migrate = db.transaction(() => {
+    const users = db.prepare('SELECT id, name, department FROM users').all();
+    const insertEmployee = db.prepare(
+      'INSERT OR IGNORE INTO employees (id, name, department, active, user_id) VALUES (?, ?, ?, 1, ?)'
+    );
+    for (const u of users) insertEmployee.run(u.id, u.name, u.department, u.id);
+
+    for (const table of ['transactions', 'event_attendees', 'employee_returns']) {
+      recreateTableWithEmployeeFk(table);
+    }
+  });
+  migrate();
+  createSchema(); // DROP TABLE above also dropped that table's indexes -- CREATE INDEX IF NOT EXISTS restores them.
+  db.pragma('foreign_keys = ON');
+  setSetting('employees_migrated', '1');
+}
+
+migrateEmployeeReferences();
+
+// Every login-capable user also gets an employee record (created lazily if
+// one doesn't already exist) so their own submissions/attendance can be
+// attributed via employees.id without assuming the two ids ever match.
+function getOrCreateEmployeeForUser(userId) {
+  const existing = db.prepare('SELECT id FROM employees WHERE user_id = ?').get(userId);
+  if (existing) return existing.id;
+  const user = db.prepare('SELECT name, department FROM users WHERE id = ?').get(userId);
+  if (!user) return null;
+  const info = db
+    .prepare('INSERT INTO employees (name, department, active, user_id) VALUES (?, ?, 1, ?)')
+    .run(user.name, user.department, userId);
+  return info.lastInsertRowid;
+}
 
 // Attached directly to the exported db instance (rather than changing the
 // module's export shape) since every route does `const db = require('../db')`
 // and calls `db.prepare(...)` on it directly.
 db.getSetting = getSetting;
 db.setSetting = setSetting;
+db.getOrCreateEmployeeForUser = getOrCreateEmployeeForUser;
 
 module.exports = db;

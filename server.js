@@ -74,12 +74,13 @@ app.get('/', (req, res) => {
 });
 
 app.use(require('./src/routes/auth'));
+app.use(require('./src/routes/security'));
 app.use(require('./src/routes/supplyRequest'));
 app.use(require('./src/routes/expenses'));
 app.use(require('./src/routes/admin'));
 app.use(require('./src/routes/bulkImport'));
-app.use(require('./src/routes/forecast'));
 app.use(require('./src/routes/marketing'));
+app.use(require('./src/routes/employeeRoi'));
 app.use(require('./src/routes/settings'));
 app.use(require('./src/routes/reports'));
 app.use(require('./src/routes/data'));

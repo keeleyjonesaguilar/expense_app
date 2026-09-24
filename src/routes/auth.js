@@ -1,7 +1,10 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const { verifySync } = require('otplib');
 const db = require('../db');
 const { flash, requireAuth } = require('../middleware/auth');
+
+const MAX_TOTP_ATTEMPTS = 5;
 
 const router = express.Router();
 
@@ -41,12 +44,69 @@ router.post('/login', (req, res) => {
   const pw = req.body.password || '';
   const user = findUserByEmail.get(email);
 
+  if (user && !user.active) {
+    flash(req, 'danger', 'This account has been deactivated.');
+    return res.render('login', { title: 'Log in' });
+  }
+
   if (user && bcrypt.compareSync(pw, user.password_hash)) {
+    if (user.totp_enabled) {
+      // Password alone doesn't establish a session yet -- only a userId
+      // pending the second factor. req.currentUser stays unset (attachUser
+      // only reads session.userId) until /login/verify succeeds.
+      req.session.pendingUserId = user.id;
+      req.session.totpAttempts = 0;
+      return res.redirect('/login/verify');
+    }
     req.session.userId = user.id;
     return res.redirect('/');
   }
   flash(req, 'danger', 'Invalid email or password.');
   res.render('login', { title: 'Log in' });
+});
+
+// GET/POST /login/verify -- the second factor step for an account with 2FA
+// enabled (see /account/security). Only reachable mid-login, after the
+// password already checked out; there's nothing here for an attacker with
+// just a password to skip to without also having the authenticator app.
+router.get('/login/verify', (req, res) => {
+  if (!req.session.pendingUserId) return res.redirect('/login');
+  res.render('login_verify', { title: 'Verification Code' });
+});
+
+router.post('/login/verify', (req, res) => {
+  if (!req.session.pendingUserId) return res.redirect('/login');
+
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.session.pendingUserId);
+  const code = (req.body.code || '').trim();
+
+  // verifySync throws (rather than returning {valid:false}) on malformed
+  // input, e.g. anything not exactly 6 digits -- a user mistyping or
+  // pasting extra whitespace shouldn't produce a 500 page.
+  let isValid = false;
+  try {
+    isValid = !!(user && user.totp_secret && verifySync({ secret: user.totp_secret, token: code }).valid);
+  } catch (err) {
+    isValid = false;
+  }
+
+  if (isValid) {
+    req.session.userId = user.id;
+    req.session.pendingUserId = null;
+    req.session.totpAttempts = 0;
+    return res.redirect('/');
+  }
+
+  req.session.totpAttempts = (req.session.totpAttempts || 0) + 1;
+  if (req.session.totpAttempts >= MAX_TOTP_ATTEMPTS) {
+    req.session.pendingUserId = null;
+    req.session.totpAttempts = 0;
+    flash(req, 'danger', 'Too many incorrect codes. Please log in again.');
+    return res.redirect('/login');
+  }
+
+  flash(req, 'danger', 'Incorrect code. Please try again.');
+  res.render('login_verify', { title: 'Verification Code' });
 });
 
 router.get('/logout', requireAuth, (req, res) => {

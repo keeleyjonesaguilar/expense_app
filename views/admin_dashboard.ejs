@@ -3,16 +3,6 @@ const hasCategories = top_categories && top_categories.length > 0;
 const hasMonths = months_sorted && months_sorted.length > 0;
 const hasSplit = (recurring_total + onetime_total + event_marketing_total) > 0;
 
-// Cheap trend indicator on Total Spend vs. the same comparable period last
-// year -- reuses the year-over-year data already computed for the table
-// below rather than a separate query. Approximate (sums whatever
-// categories appear in either year), not used anywhere money-critical.
-const yoyPrevTotal = (year_over_year || []).reduce((sum, r) => sum + r.prev, 0);
-const yoyCurrTotal = (year_over_year || []).reduce((sum, r) => sum + r.curr, 0);
-const showTrend = !no_prior_year_data && year_over_year && year_over_year.length > 0;
-const trendUp = yoyCurrTotal > yoyPrevTotal;
-const trendPct = yoyPrevTotal ? Math.abs(((yoyCurrTotal - yoyPrevTotal) / yoyPrevTotal) * 100) : 0;
-
 const extraScripts = `
 <script src="/static/vendor/chart.umd.min.js"></script>
 <script>
@@ -81,6 +71,49 @@ new Chart(document.getElementById('splitChart'), {
   .empty-chart-state { display: flex; align-items: center; justify-content: center; height: 220px; color: #6b6a63; font-size: .9rem; }
 </style>
 
+<% if (pending_expense_reports_count > 0 || open_requests_count > 0) { %>
+<div class="card p-3 mb-4" style="border-left: 4px solid var(--brand-gold);">
+  <h6 class="mb-2">Needs Your Review</h6>
+  <div class="row g-3">
+    <% if (pending_expense_reports_count > 0) { %>
+    <div class="col-md-4">
+      <a href="/admin/transactions?status=pending" class="text-decoration-none">
+        <div class="stat-tile" style="min-height:auto;">
+          <div class="label">Expense Reports Pending</div>
+          <div class="value"><%= pending_expense_reports_count %></div>
+        </div>
+      </a>
+    </div>
+    <% } %>
+    <% if (open_requests.length) { %>
+    <div class="col-md-8">
+      <div class="small text-muted text-uppercase mb-1" style="letter-spacing:.03em;">
+        Open Item / Event Requests (<%= open_requests_count %>)
+      </div>
+      <table class="table table-sm mb-1">
+        <tbody>
+          <% open_requests.forEach(function (t) { %>
+          <tr style="cursor:pointer" onclick="window.location='/admin/transactions/requests/<%= t.id %>'">
+            <td><%= t.description %></td>
+            <td class="text-muted small"><%= t.category ? t.category.name : 'Uncategorized' %></td>
+            <td>
+              <% (t.tags || []).slice(0, 2).forEach(function (name) { %><span class="badge text-bg-light border me-1"><%= name %></span><% }) %>
+            </td>
+            <td class="text-end">
+              <% if (t.status === 'awaiting_order') { %><span class="badge bg-info text-dark">Awaiting Order</span>
+              <% } else { %><span class="badge badge-pending">Pending</span><% } %>
+            </td>
+          </tr>
+          <% }) %>
+        </tbody>
+      </table>
+      <a href="/admin/transactions/requests" class="small">View all requests &rarr;</a>
+    </div>
+    <% } %>
+  </div>
+</div>
+<% } %>
+
 <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
   <h3 class="dashboard-title mb-0">Admin Dashboard</h3>
   <form method="get" class="d-flex align-items-center gap-2">
@@ -97,45 +130,59 @@ new Chart(document.getElementById('splitChart'), {
 </div>
 
 <div class="row g-3 mb-3">
-  <div class="col-md-3">
-    <div class="stat-tile">
-      <div class="label">Total Approved Spend</div>
-      <div class="value">$<%= fmtMoney(total_spend) %></div>
-      <% if (showTrend) { %>
-        <span class="small <%= trendUp ? 'text-danger' : 'text-success' %>" title="vs. same period last year">
-          <%= trendUp ? '▲' : '▼' %> <%= trendPct.toFixed(0) %>% vs prior year
-        </span>
-      <% } %>
-    </div>
-  </div>
+  <div class="col-md-3"><div class="stat-tile"><div class="label">Total Approved Spend</div><div class="value">$<%= fmtMoney(total_spend) %></div></div></div>
   <div class="col-md-3"><div class="stat-tile accent-recurring"><div class="label">Recurring Spend</div><div class="value">$<%= fmtMoney(recurring_total) %></div></div></div>
   <div class="col-md-3"><div class="stat-tile accent-onetime"><div class="label">One-Time Spend</div><div class="value">$<%= fmtMoney(onetime_total) %></div></div></div>
   <div class="col-md-3"><div class="stat-tile accent-event"><div class="label">Event/Marketing</div><div class="value">$<%= fmtMoney(event_marketing_total) %></div></div></div>
 </div>
 
 <div class="row g-3 mb-4">
-  <div class="col-md-4"><div class="stat-tile"><div class="label">Pending Approvals</div><div class="value"><%= pending_count %></div>
+  <div class="col-md-6"><div class="stat-tile"><div class="label">Pending Approvals</div><div class="value"><%= pending_count %></div>
     <% if (pending_count) { %><a href="/admin/transactions/requests" class="small">Review &rarr;</a><% } %>
   </div></div>
-  <div class="col-md-4"><div class="stat-tile"><div class="label">Potential Upcoming</div><div class="value">$<%= fmtMoney(upcoming_spend) %></div></div></div>
-  <div class="col-md-4">
-    <div class="stat-tile">
-      <div class="label">Avg Spend / Employee</div>
-      <% if (avg_spend_per_employee != null) { %>
-        <div class="value">$<%= fmtMoney(avg_spend_per_employee) %></div>
-        <div class="small text-muted">Excludes Event/Marketing spend</div>
-      <% } else { %>
-        <div class="value text-muted" style="font-size:1.1rem;">—</div>
-        <a href="/admin/settings" class="small">Set headcount in Settings</a>
-      <% } %>
-    </div>
+  <div class="col-md-6"><div class="stat-tile"><div class="label">Potential Upcoming</div><div class="value">$<%= fmtMoney(upcoming_spend) %></div></div></div>
+</div>
+
+<% if (spend_by_tag && spend_by_tag.size) { %>
+<div class="card p-3 mb-4">
+  <h6>Spend by Category &amp; Tag</h6>
+  <p class="text-muted small mb-2">The 4 main categories, broken down by tag -- what's actually driving spend within each.</p>
+  <div class="row g-3">
+    <% spend_by_tag.forEach(function (tagRows, categoryName) { %>
+      <div class="col-md-6">
+        <div class="small text-muted text-uppercase mb-1" style="letter-spacing:.03em;"><%= categoryName %></div>
+        <table class="table table-sm mb-3">
+          <tbody>
+            <% tagRows.forEach(function (pair) { %>
+            <tr><td><%= pair[0] %></td><td class="text-end">$<%= fmtMoney(pair[1]) %></td></tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    <% }) %>
   </div>
 </div>
+<% } %>
+
+<% if (by_employee && by_employee.length) { %>
+<div class="card p-3 mb-4">
+  <h6>Spend by Person</h6>
+  <p class="text-muted small mb-2">Who submitted/is attributed to each transaction -- "Bulk Import" covers rows from a spreadsheet import with no employee mapped. See <a href="/admin/employees/roi">Employee ROI</a> for invested-vs-returned detail.</p>
+  <table class="table table-sm mb-0">
+    <thead><tr><th>Person</th><th class="text-end">Total Spend</th></tr></thead>
+    <tbody>
+      <% by_employee.forEach(function (pair) { %>
+      <tr><td><%= pair[0] %></td><td class="text-end">$<%= fmtMoney(pair[1]) %></td></tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+<% } %>
 
 <div class="row g-3 chart-row mb-4">
   <div class="col-md-6">
     <div class="card p-3">
-      <h6>Top Categories</h6>
+      <h6>Spend by Category</h6>
       <% if (hasCategories) { %><canvas id="catChart" height="220"></canvas>
       <% } else { %><div class="empty-chart-state">No spend recorded for this period yet</div><% } %>
     </div>
@@ -170,51 +217,21 @@ new Chart(document.getElementById('splitChart'), {
   </div>
 </div>
 
-<div class="card p-3 mb-4">
-  <h6>Top Vendors</h6>
-  <% if (top_vendors && top_vendors.length) { %>
+<% if (spend_by_kind && spend_by_kind.length) { %>
+<div class="card p-3">
+  <h6>Spend by Type — Fixed vs. Discretionary</h6>
+  <p class="text-muted small mb-2">How much of spend is committed/predictable vs. controllable, based on each category's assigned type (Settings &rarr; Categories).</p>
   <table class="table table-sm mb-0">
-    <thead><tr><th>Vendor</th><th class="text-end">Total Spend</th></tr></thead>
+    <thead><tr><th>Type</th><th class="text-end">Total Spend</th><th class="text-end">% of Total</th></tr></thead>
     <tbody>
-      <% top_vendors.forEach(function (pair) { %>
-      <tr><td><%= pair[0] %></td><td class="text-end">$<%= fmtMoney(pair[1]) %></td></tr>
+      <% spend_by_kind.forEach(function (pair) { %>
+      <tr><td><%= pair[0] %></td><td class="text-end">$<%= fmtMoney(pair[1]) %></td><td class="text-end"><%= total_spend ? (pair[1] / total_spend * 100).toFixed(1) : '0.0' %>%</td></tr>
       <% }) %>
     </tbody>
   </table>
-  <% } else { %><p class="text-muted small mb-0">No spend recorded for this period yet.</p><% } %>
 </div>
+<% } %>
 
-<div class="card p-3">
-  <h6>Year-over-Year by Category</h6>
-  <% if (no_prior_year_data && year_over_year && year_over_year.length) { %>
-    <p class="text-muted small">No prior-year data available for <%= prev_year %> — showing current-year figures only.</p>
-    <table class="table table-sm">
-      <thead><tr><th>Category</th><th class="text-end">Current Year</th></tr></thead>
-      <tbody>
-        <% year_over_year.forEach(function (row) { %>
-        <tr><td><%= row.name %></td><td class="text-end">$<%= fmtMoney(row.curr) %></td></tr>
-        <% }) %>
-      </tbody>
-    </table>
-  <% } else if (year_over_year && year_over_year.length) { %>
-    <table class="table table-sm">
-      <thead><tr><th>Category</th><th class="text-end">Previous Year</th><th class="text-end">Current Year</th><th class="text-end">Change</th></tr></thead>
-      <tbody>
-        <% year_over_year.forEach(function (row) { %>
-        <tr>
-          <td><%= row.name %></td>
-          <td class="text-end">$<%= fmtMoney(row.prev) %></td>
-          <td class="text-end">$<%= fmtMoney(row.curr) %></td>
-          <td class="text-end <%= row.change > 0 ? 'text-danger' : row.change < 0 ? 'text-success' : 'text-muted' %>">
-            <%= row.change > 0 ? '+$' + fmtMoney(row.change) : row.change < 0 ? '-$' + fmtMoney(-row.change) : '$' + fmtMoney(0) %>
-          </td>
-        </tr>
-        <% }) %>
-      </tbody>
-    </table>
-  <% } else { %>
-    <p class="text-muted small mb-0">No spend recorded for this period yet.</p>
-  <% } %>
-</div>
+<p class="text-muted small mt-3">Top Vendors and Year-over-Year detail moved to the <a href="/admin/reports">Reports</a> page.</p>
 
 <%- include('partials/foot', { extraScripts }) %>

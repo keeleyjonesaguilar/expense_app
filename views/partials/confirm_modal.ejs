@@ -1,0 +1,53 @@
+<!-- Reusable typed-confirmation modal. Any delete/deactivate button on the
+     page calls openConfirmModal({ action, word, title, body, submitLabel,
+     fields }) instead of submitting directly -- word is the exact word the
+     user must type (case-insensitive, checked server-side too via
+     src/lib/confirm.js's typedConfirmMatches). -->
+<div class="modal fade" id="confirmActionModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post" id="confirmActionForm">
+        <div class="modal-header">
+          <h5 class="modal-title" id="confirmActionTitle">Confirm</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p id="confirmActionBody" class="mb-3"></p>
+          <label class="form-label small">Type <strong id="confirmActionWord"></strong> to confirm</label>
+          <input type="text" id="confirmActionInput" name="confirm" class="form-control" autocomplete="off" required>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-danger" id="confirmActionSubmit">Confirm</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<script>
+function openConfirmModal(opts) {
+  var form = document.getElementById('confirmActionForm');
+  form.setAttribute('action', opts.action);
+  document.getElementById('confirmActionTitle').textContent = opts.title || 'Confirm';
+  document.getElementById('confirmActionBody').textContent = opts.body || '';
+  document.getElementById('confirmActionWord').textContent = (opts.word || 'delete').toUpperCase();
+  var input = document.getElementById('confirmActionInput');
+  input.value = '';
+  input.placeholder = (opts.word || 'delete').toUpperCase();
+  var submitBtn = document.getElementById('confirmActionSubmit');
+  submitBtn.textContent = opts.submitLabel || 'Confirm';
+  submitBtn.className = 'btn ' + (opts.submitClass || 'btn-danger');
+  form.querySelectorAll('input[data-dynamic-field]').forEach(function (el) { el.remove(); });
+  if (opts.fields) {
+    Object.keys(opts.fields).forEach(function (k) {
+      var inp = document.createElement('input');
+      inp.type = 'hidden';
+      inp.name = k;
+      inp.value = opts.fields[k];
+      inp.setAttribute('data-dynamic-field', '1');
+      form.appendChild(inp);
+    });
+  }
+  bootstrap.Modal.getOrCreateInstance(document.getElementById('confirmActionModal')).show();
+}
+</script>
