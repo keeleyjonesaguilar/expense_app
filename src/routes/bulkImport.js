@@ -17,7 +17,7 @@ router.use(requireAuth, requireAdmin);
 
 const listCategories = db.prepare('SELECT * FROM categories ORDER BY name');
 const listTags = db.prepare(
-  'SELECT tags.id, tags.name, c.name AS category_name FROM tags JOIN categories c ON c.id = tags.category_id ORDER BY c.name, tags.name'
+  'SELECT tags.id, tags.name, tags.category_id, c.name AS category_name FROM tags JOIN categories c ON c.id = tags.category_id ORDER BY c.name, tags.name'
 );
 const findTagByName = db.prepare('SELECT * FROM tags WHERE name = ?');
 const insertTag = db.prepare('INSERT INTO tags (name, category_id) VALUES (?, ?)');
@@ -25,10 +25,13 @@ const linkTag = db.prepare('INSERT OR IGNORE INTO transaction_tags (transaction_
 
 // Looks a tag up by name; if it doesn't exist yet (an AI/regex-proposed new
 // tag the reviewer kept), creates it under the given category -- same
-// "auto-create on commit, human already reviewed it" pattern as vendors.
+// "auto-create on commit, human already reviewed it" pattern as vendors. An
+// existing tag from a different category than the row's is dropped, not
+// cross-linked.
 function findOrCreateTag(name, categoryId) {
-  if (!name) return null;
+  if (!name || !categoryId) return null;
   let tag = findTagByName.get(name);
+  if (tag && tag.category_id !== categoryId) return null;
   if (!tag) {
     const info = insertTag.run(name, categoryId);
     tag = { id: info.lastInsertRowid, name, category_id: categoryId };

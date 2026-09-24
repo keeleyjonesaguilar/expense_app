@@ -102,24 +102,26 @@
     <% } %>
     <tr class="collapse" id="edit-<%= t.id %>">
       <td colspan="14" class="bg-light">
-        <form method="post" action="/admin/transactions/<%= t.id %>/update" class="row g-2 align-items-end py-2">
+        <form method="post" action="/admin/transactions/<%= t.id %>/update" class="row g-2 align-items-end py-2" data-tag-scope>
           <input type="hidden" name="next" value="<%= currentUrl %>">
           <input type="hidden" name="tags_present" value="1">
           <div class="col-auto">
             <label class="form-label small mb-0">Category</label>
-            <select name="category_id" class="form-select form-select-sm">
+            <select name="category_id" class="form-select form-select-sm" data-tag-category-select>
+              <% if (!t.category_id) { %><option value="" selected>Choose...</option><% } %>
               <% categories.forEach(function (c) { %><option value="<%= c.id %>" <%= t.category_id === c.id ? 'selected' : '' %>><%= c.name %></option><% }) %>
             </select>
           </div>
           <div class="col-12">
             <label class="form-label small mb-0 d-block">Tags</label>
             <% tags.forEach(function (tg) { %>
-              <div class="form-check form-check-inline">
+              <div class="form-check form-check-inline" data-tag-category="<%= tg.category_id %>">
                 <input type="checkbox" class="form-check-input" name="tag" value="<%= tg.name %>" id="txtag-<%= t.id %>-<%= tg.id %>"
                   <%= (t.tags || []).includes(tg.name) ? 'checked' : '' %>>
-                <label class="form-check-label small" for="txtag-<%= t.id %>-<%= tg.id %>"><%= tg.name %> <span class="text-muted">(<%= tg.category_name %>)</span></label>
+                <label class="form-check-label small" for="txtag-<%= t.id %>-<%= tg.id %>"><%= tg.name %></label>
               </div>
             <% }) %>
+            <span class="small text-muted d-none" data-tag-empty></span>
           </div>
           <div class="col-auto">
             <label class="form-label small mb-0">Vendor</label>

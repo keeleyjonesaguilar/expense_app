@@ -30,7 +30,7 @@
 
 <div class="card p-4">
   <h6 class="text-muted mb-3">Step 2: review and submit</h6>
-  <form method="post">
+  <form method="post" data-tag-scope>
     <input type="hidden" name="receipt_path" value="<%= extracted ? (extracted.receipt_path || '') : '' %>">
     <div class="row">
       <div class="col-md-4 mb-3">
@@ -45,7 +45,7 @@
       </div>
       <div class="col-md-4 mb-3">
         <label class="form-label">Category *</label>
-        <select name="category_id" id="category_id" class="form-select" required>
+        <select name="category_id" id="category_id" class="form-select" required data-tag-category-select>
           <option value="">Choose...</option>
           <% categories.forEach(function (c) { %>
             <option value="<%= c.id %>" <%= extracted && extracted.suggested_category === c.name ? 'selected' : '' %>><%= c.name %></option>
@@ -63,20 +63,22 @@
       <label class="form-label">Tags <span class="text-muted small">(optional, pick any that fit)</span></label>
       <div class="d-flex flex-wrap gap-3">
         <% tags.forEach(function (t) { %>
-          <div class="form-check">
+          <div class="form-check" data-tag-category="<%= t.category_id %>">
             <input type="checkbox" class="form-check-input" name="tag" value="<%= t.name %>" id="tag-<%= t.id %>"
               <%= extracted && extracted.tags && extracted.tags.some(function (et) { return et.name === t.name; }) ? 'checked' : '' %>>
-            <label class="form-check-label small" for="tag-<%= t.id %>"><%= t.name %> <span class="text-muted">(<%= t.category_name %>)</span></label>
+            <label class="form-check-label small" for="tag-<%= t.id %>"><%= t.name %></label>
           </div>
         <% }) %>
         <% if (extracted && extracted.tags) { %>
+          <% const suggestedCat = categories.find(function (c) { return c.name === extracted.suggested_category; }); %>
           <% extracted.tags.filter(function (et) { return et.is_new; }).forEach(function (et) { %>
-            <div class="form-check">
+            <div class="form-check" data-tag-category="<%= suggestedCat ? suggestedCat.id : '' %>">
               <input type="checkbox" class="form-check-input" name="tag" value="<%= et.name %>" checked id="newtag-<%= et.name %>">
               <label class="form-check-label small" for="newtag-<%= et.name %>"><%= et.name %> <span class="badge bg-primary">new</span></label>
             </div>
           <% }) %>
         <% } %>
+        <span class="small text-muted d-none" data-tag-empty></span>
       </div>
     </div>
     <div class="row">

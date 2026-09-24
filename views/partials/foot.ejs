@@ -6,6 +6,36 @@
 <%- include('confirm_modal') %>
 
 <script src="/static/vendor/bootstrap.bundle.min.js"></script>
+<script>
+// Category-scoped tag pickers: inside any [data-tag-scope], only the tag
+// options whose data-tag-category matches the [data-tag-category-select]'s
+// current value are shown. The rest are hidden AND disabled -- disabled so
+// they aren't submitted, but they keep their checked state, so switching the
+// category away and back doesn't lose what was ticked.
+(function () {
+  function sync(scope) {
+    var select = scope.querySelector('[data-tag-category-select]');
+    if (!select) return;
+    var visible = 0;
+    scope.querySelectorAll('[data-tag-category]').forEach(function (opt) {
+      var match = select.value !== '' && opt.getAttribute('data-tag-category') === select.value;
+      opt.classList.toggle('d-none', !match);
+      opt.querySelectorAll('input').forEach(function (input) { input.disabled = !match; });
+      if (match) visible += 1;
+    });
+    var empty = scope.querySelector('[data-tag-empty]');
+    if (empty) {
+      empty.textContent = select.value ? 'No tags in this category yet.' : 'Pick a category to see its tags.';
+      empty.classList.toggle('d-none', visible > 0);
+    }
+  }
+  document.querySelectorAll('[data-tag-scope]').forEach(function (scope) {
+    sync(scope);
+    var select = scope.querySelector('[data-tag-category-select]');
+    if (select) select.addEventListener('change', function () { sync(scope); });
+  });
+})();
+</script>
 <%- typeof extraScripts !== 'undefined' ? extraScripts : '' %>
 </body>
 </html>

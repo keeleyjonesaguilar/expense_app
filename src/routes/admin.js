@@ -17,15 +17,19 @@ router.use(requireAuth, requireAdmin);
 
 const listCategories = db.prepare('SELECT * FROM categories ORDER BY name');
 const listTags = db.prepare(
-  'SELECT tags.id, tags.name, c.name AS category_name FROM tags JOIN categories c ON c.id = tags.category_id ORDER BY c.name, tags.name'
+  'SELECT tags.id, tags.name, tags.category_id, c.name AS category_name FROM tags JOIN categories c ON c.id = tags.category_id ORDER BY c.name, tags.name'
 );
 const findTagByName = db.prepare('SELECT * FROM tags WHERE name = ?');
 const insertTag = db.prepare('INSERT INTO tags (name, category_id) VALUES (?, ?)');
 const clearTxTags = db.prepare('DELETE FROM transaction_tags WHERE transaction_id = ?');
 const linkTxTag = db.prepare('INSERT OR IGNORE INTO transaction_tags (transaction_id, tag_id) VALUES (?, ?)');
+// An existing tag is only attached under its own category -- one from a
+// different category is dropped, not cross-linked (the edit form only shows
+// the selected category's tags; this is the server-side backstop).
 function findOrCreateTag(name, categoryId) {
-  if (!name) return null;
+  if (!name || !categoryId) return null;
   let tag = findTagByName.get(name);
+  if (tag && tag.category_id !== categoryId) return null;
   if (!tag) {
     const info = insertTag.run(name, categoryId);
     tag = { id: info.lastInsertRowid, name, category_id: categoryId };

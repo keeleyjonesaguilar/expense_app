@@ -74,7 +74,7 @@
       <thead><tr><th>Skip</th><th>Date</th><th>Qty</th><th>Price/Item</th><th>Total Price</th><th>Category</th><th>Tags</th><th>Vendor</th><th>Employee</th><th>Description</th><th>Link</th><th>Notes</th><th>One-Time</th></tr></thead>
       <tbody>
       <% preview_rows.forEach(function (row, i) { %>
-        <tr class="<%= row.duplicate_of && row.duplicate_of.length ? 'table-warning' : '' %>">
+        <tr class="<%= row.duplicate_of && row.duplicate_of.length ? 'table-warning' : '' %>" data-tag-scope>
           <td>
             <input type="checkbox" name="skip_<%= i %>" <%= row.duplicate_of && row.duplicate_of.length ? 'checked' : '' %>>
             <% if (row.duplicate_of && row.duplicate_of.length) { %>
@@ -92,7 +92,7 @@
             const rowTags = row.tags || [];
           %>
           <td>
-            <select name="category_<%= i %>" class="form-select form-select-sm <%= !categoryMatches ? 'border-danger' : '' %>">
+            <select name="category_<%= i %>" class="form-select form-select-sm <%= !categoryMatches ? 'border-danger' : '' %>" data-tag-category-select>
               <% if (!categoryMatches) { %><option value="" selected disabled>&#9888; Unmatched: "<%= row.suggested_category %>" -- choose one</option><% } %>
               <% categories.forEach(function (c) { %><option value="<%= c.name %>" <%= row.suggested_category === c.name ? 'selected' : '' %>><%= c.name %></option><% }) %>
             </select>
@@ -105,18 +105,19 @@
           </td>
           <td style="min-width:160px">
             <% tags.forEach(function (t) { %>
-              <div class="form-check form-check-sm">
+              <div class="form-check form-check-sm" data-tag-category="<%= t.category_name %>">
                 <input type="checkbox" class="form-check-input" name="tag_<%= i %>" value="<%= t.name %>" id="tag-<%= i %>-<%= t.id %>"
                   <%= rowTags.some(function (rt) { return rt.name === t.name; }) ? 'checked' : '' %>>
-                <label class="form-check-label small" for="tag-<%= i %>-<%= t.id %>"><%= t.name %> <span class="text-muted">(<%= t.category_name %>)</span></label>
+                <label class="form-check-label small" for="tag-<%= i %>-<%= t.id %>"><%= t.name %></label>
               </div>
             <% }) %>
             <% rowTags.filter(function (rt) { return rt.is_new; }).forEach(function (rt) { %>
-              <div class="form-check form-check-sm">
+              <div class="form-check form-check-sm" data-tag-category="<%= row.suggested_category %>">
                 <input type="checkbox" class="form-check-input" name="tag_<%= i %>" value="<%= rt.name %>" checked id="newtag-<%= i %>-<%= rt.name %>">
                 <label class="form-check-label small" for="newtag-<%= i %>-<%= rt.name %>"><%= rt.name %> <span class="badge bg-primary">new</span></label>
               </div>
             <% }) %>
+            <span class="small text-muted d-none" data-tag-empty></span>
           </td>
           <td><input type="text" name="vendor_<%= i %>" value="<%= row.vendor || '' %>" class="form-control form-control-sm" style="width:120px"></td>
           <td>
