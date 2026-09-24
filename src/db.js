@@ -359,6 +359,11 @@ addColumnIfMissing('users', 'totp_enabled INTEGER NOT NULL DEFAULT 0');
 // Deactivating a user blocks login without deleting their row (which would
 // orphan everything they've submitted/approved/logged).
 addColumnIfMissing('users', 'active INTEGER NOT NULL DEFAULT 1');
+// Needs-review queue (the nav's Review bell, routes/review.js): non-NULL
+// means "an admin should look at this", holding the reason why -- e.g. an
+// imported row that didn't match any category. Cleared once resolved or
+// dismissed.
+addColumnIfMissing('transactions', 'review_reason TEXT');
 
 // Seed the bulk-import column-alias matcher's starting data, same
 // insert-if-missing pattern as seedCategories() below.
@@ -425,6 +430,19 @@ function migrateEmployeeReferences() {
 }
 
 migrateEmployeeReferences();
+
+// One-time seed of the needs-review queue when review_reason is first
+// added: any already-booked transaction with no category goes in it.
+// Gated so a later "dismiss" isn't undone on the next boot.
+function backfillReviewQueue() {
+  if (getSetting('review_queue_backfilled', null)) return;
+  db.prepare(
+    "UPDATE transactions SET review_reason = 'No category assigned' WHERE category_id IS NULL AND review_reason IS NULL AND status = 'approved'"
+  ).run();
+  setSetting('review_queue_backfilled', '1');
+}
+
+backfillReviewQueue();
 
 // Every login-capable user also gets an employee record (created lazily if
 // one doesn't already exist) so their own submissions/attendance can be

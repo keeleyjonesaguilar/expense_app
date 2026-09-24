@@ -11,6 +11,7 @@ const {
 } = require('../constants');
 const { toCsv } = require('../lib/csv');
 const { TX_JOIN_SELECT, hydrate, computeSpendSummary, computeSpendByTag } = require('../lib/reportData');
+const { attachTags } = require('../lib/txTags');
 
 const router = express.Router();
 router.use(requireAuth, requireAdmin);
@@ -40,27 +41,8 @@ const listEmployees = db.prepare('SELECT * FROM employees WHERE active = 1 ORDER
 const findVendorByName = db.prepare('SELECT * FROM vendors WHERE name = ?');
 const insertVendor = db.prepare('INSERT INTO vendors (name) VALUES (?)');
 const getTxById = db.prepare('SELECT * FROM transactions WHERE id = ?');
-
-// Tags are many-per-transaction, so they don't fit cleanly into
-// TX_JOIN_SELECT's one-row-per-transaction join -- load them separately and
-// attach as t.tags (an array of names). Fine at this scale (a handful of
-// tags per transaction, not hundreds).
-function attachTags(txs) {
-  if (!txs.length) return txs;
-  const ids = txs.map((t) => t.id);
-  const tagRows = db
-    .prepare(
-      `SELECT tt.transaction_id, tg.name FROM transaction_tags tt JOIN tags tg ON tg.id = tt.tag_id WHERE tt.transaction_id IN (${ids.map(() => '?').join(',')})`
-    )
-    .all(...ids);
-  const tagsByTx = new Map();
-  for (const row of tagRows) {
-    if (!tagsByTx.has(row.transaction_id)) tagsByTx.set(row.transaction_id, []);
-    tagsByTx.get(row.transaction_id).push(row.name);
-  }
-  for (const t of txs) t.tags = tagsByTx.get(t.id) || [];
-  return txs;
-}
+// "Show N per page" choices on All Transactions; the first is the default.
+const PAGE_SIZES = [50, 100, 250, 500];
 
 function findOrCreateVendor(name) {
   if (!name) return null;
@@ -264,7 +246,22 @@ router.get('/admin/transactions', (req, res) => {
   const oneTime = req.query.one_time;
   const status = req.query.status;
   const uploadId = req.query.upload_id ? parseInt(req.query.upload_id, 10) : null;
+  // Date range (inclusive), from the From/To inputs -- dates are stored as
+  // YYYY-MM-DD text, so plain string comparison orders them correctly.
+  // Anything not shaped like a date is ignored; a backwards range is swapped.
+  const isoDate = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(v || '') ? v : null);
+  let dateFrom = isoDate(req.query.date_from);
+  let dateTo = isoDate(req.query.date_to);
+  if (dateFrom && dateTo && dateFrom > dateTo) [dateFrom, dateTo] = [dateTo, dateFrom];
 
+  if (dateFrom) {
+    clauses.push('t.date >= ?');
+    params.push(dateFrom);
+  }
+  if (dateTo) {
+    clauses.push('t.date <= ?');
+    params.push(dateTo);
+  }
   if (uploadId) {
     clauses.push('t.upload_id = ?');
     params.push(uploadId);
@@ -294,7 +291,23 @@ router.get('/admin/transactions', (req, res) => {
   }
 
   const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
-  const txs = db.prepare(`${TX_JOIN_SELECT} ${where} ORDER BY t.date DESC`).all(...params).map(hydrate);
+
+  // Paging: ?per_page= one of PAGE_SIZES (default 50), ?page= 1-based,
+  // clamped to the last page so a stale link past the end still shows rows.
+  const perPage = PAGE_SIZES.includes(parseInt(req.query.per_page, 10)) ? parseInt(req.query.per_page, 10) : PAGE_SIZES[0];
+  const totalCount = db.prepare(`SELECT COUNT(*) AS n FROM transactions t ${where}`).get(...params).n;
+  const pageCount = Math.max(1, Math.ceil(totalCount / perPage));
+  const page = Math.min(Math.max(parseInt(req.query.page, 10) || 1, 1), pageCount);
+  const txs = db
+    .prepare(`${TX_JOIN_SELECT} ${where} ORDER BY t.date DESC, t.id DESC LIMIT ? OFFSET ?`)
+    .all(...params, perPage, (page - 1) * perPage)
+    .map(hydrate);
+  // Link to another page of this same filtered view.
+  const pageUrl = (n) => {
+    const qs = new URLSearchParams(req.query);
+    qs.set('page', String(n));
+    return `/admin/transactions?${qs.toString()}`;
+  };
 
   attachTags(txs);
 
@@ -304,7 +317,13 @@ router.get('/admin/transactions', (req, res) => {
     categories: listCategories.all(),
     tags: listTags.all(),
     employees: listEmployees.all(),
-    filters: { ...req.query, status: status === undefined ? STATUS_APPROVED : status },
+    filters: {
+      ...req.query,
+      status: status === undefined ? STATUS_APPROVED : status,
+      date_from: dateFrom || '',
+      date_to: dateTo || '',
+    },
+    paging: { page, perPage, pageCount, totalCount, pageSizes: PAGE_SIZES, pageUrl },
     // Round-tripped through the inline edit form's hidden "next" field so
     // saving an edit returns to this same filtered/sorted view instead of
     // resetting to the unfiltered list.
@@ -379,6 +398,10 @@ router.post('/admin/transactions/:txId/update', (req, res) => {
     Number.isFinite(unitPrice) ? unitPrice : null,
     tx.id
   );
+  // Re-categorizing a flagged item from here counts as reviewing it.
+  if (tx.review_reason && catId && catId !== tx.category_id) {
+    db.prepare('UPDATE transactions SET review_reason = NULL WHERE id = ?').run(tx.id);
+  }
 
   // Tags: only touched when the form actually included at least one tag_
   // field -- lets other callers (e.g. a future API) update a transaction

@@ -37,7 +37,31 @@
       <option value="rejected" <%= filters.status === 'rejected' ? 'selected' : '' %>>Rejected</option>
     </select>
   </div>
+  <div class="col-auto d-flex align-items-center gap-1">
+    <select id="date_preset" class="form-select form-select-sm" style="width:auto" aria-label="Date range">
+      <option value="">Any date</option>
+      <option value="this_month">This month</option>
+      <option value="last_month">Last month</option>
+      <option value="this_quarter">This quarter</option>
+      <option value="this_year">This year</option>
+      <option value="last_year">Last year</option>
+      <option value="custom">Custom range</option>
+    </select>
+    <input type="date" name="date_from" id="date_from" value="<%= filters.date_from %>" class="form-control form-control-sm" aria-label="From date" title="From">
+    <span class="small text-muted">to</span>
+    <input type="date" name="date_to" id="date_to" value="<%= filters.date_to %>" class="form-control form-control-sm" aria-label="To date" title="To">
+  </div>
   <div class="col-auto"><button class="btn btn-outline-secondary btn-sm">Filter</button></div>
+  <% if (filters.date_from || filters.date_to || filters.category_id || filters.employee_id || filters.one_time) { %>
+    <div class="col-auto"><a href="/admin/transactions<%= filters.per_page ? '?per_page=' + encodeURIComponent(filters.per_page) : '' %>" class="btn btn-link btn-sm">Clear filters</a></div>
+  <% } %>
+  <div class="col-auto ms-auto d-flex align-items-center gap-1">
+    <label for="per_page" class="small text-muted text-nowrap mb-0">Show</label>
+    <select name="per_page" id="per_page" class="form-select form-select-sm" onchange="this.form.submit()">
+      <% paging.pageSizes.forEach(function (n) { %><option value="<%= n %>" <%= paging.perPage === n ? 'selected' : '' %>><%= n %></option><% }) %>
+    </select>
+    <span class="small text-muted text-nowrap">per page</span>
+  </div>
 </form>
 <p class="text-muted small">Showing <strong>Approved</strong> transactions by default — filter to Status: Pending to review expense reports awaiting approval. Supply requests live on the <a href="/admin/transactions/requests">Item Requests</a> tab instead.</p>
 
@@ -57,7 +81,10 @@
     <% txs.forEach(function (t) { %>
     <tr>
       <td><%= fmtDate(t.date) %></td>
-      <td><%= t.category ? t.category.name : 'Uncategorized' %></td>
+      <td>
+        <%= t.category ? t.category.name : 'Uncategorized' %>
+        <% if (t.review_reason) { %><a href="/admin/review" class="badge bg-warning text-dark text-decoration-none" title="<%= t.review_reason %>">Needs review</a><% } %>
+      </td>
       <td><% (t.tags || []).forEach(function (tn) { %><span class="badge bg-secondary me-1"><%= tn %></span><% }) %></td>
       <td><%= t.vendor ? t.vendor.name : '' %></td>
       <td><%= t.employee ? t.employee.name : (t.submitted_by ? t.submitted_by.name : '-') %></td>
@@ -163,4 +190,79 @@
   </tbody>
 </table>
 </div>
-<%- include('partials/foot') %>
+
+<%
+  // Page links: first, last, and a window of 2 either side of the current
+  // page, with a gap marker (null) wherever pages are skipped.
+  const pageLinks = [];
+  for (let n = 1; n <= paging.pageCount; n++) {
+    if (n === 1 || n === paging.pageCount || Math.abs(n - paging.page) <= 2) pageLinks.push(n);
+    else if (pageLinks[pageLinks.length - 1] !== null) pageLinks.push(null);
+  }
+  const firstShown = paging.totalCount ? (paging.page - 1) * paging.perPage + 1 : 0;
+  const lastShown = Math.min(paging.page * paging.perPage, paging.totalCount);
+%>
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3">
+  <div class="small text-muted">Showing <%= firstShown %>–<%= lastShown %> of <%= paging.totalCount %></div>
+  <% if (paging.pageCount > 1) { %>
+  <nav aria-label="Transactions pages">
+    <ul class="pagination pagination-sm mb-0">
+      <li class="page-item <%= paging.page === 1 ? 'disabled' : '' %>"><a class="page-link" href="<%= paging.pageUrl(paging.page - 1) %>">Previous</a></li>
+      <% pageLinks.forEach(function (n) { %>
+        <% if (n === null) { %>
+          <li class="page-item disabled"><span class="page-link">…</span></li>
+        <% } else { %>
+          <li class="page-item <%= n === paging.page ? 'active' : '' %>"><a class="page-link" href="<%= paging.pageUrl(n) %>"><%= n %></a></li>
+        <% } %>
+      <% }) %>
+      <li class="page-item <%= paging.page === paging.pageCount ? 'disabled' : '' %>"><a class="page-link" href="<%= paging.pageUrl(paging.page + 1) %>">Next</a></li>
+    </ul>
+  </nav>
+  <% } %>
+</div>
+<%
+const extraScripts = `
+<script>
+// Date-range quick picks: fill the From/To inputs and apply. On load, show
+// which preset (if any) the current range matches, else "Custom range".
+(function () {
+  var preset = document.getElementById('date_preset');
+  var from = document.getElementById('date_from');
+  var to = document.getElementById('date_to');
+  if (!preset || !from || !to) return;
+  function iso(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  function range(key) {
+    var now = new Date(), y = now.getFullYear(), m = now.getMonth();
+    if (key === 'this_month') return [new Date(y, m, 1), new Date(y, m + 1, 0)];
+    if (key === 'last_month') return [new Date(y, m - 1, 1), new Date(y, m, 0)];
+    if (key === 'this_quarter') { var q = Math.floor(m / 3) * 3; return [new Date(y, q, 1), new Date(y, q + 3, 0)]; }
+    if (key === 'this_year') return [new Date(y, 0, 1), new Date(y, 11, 31)];
+    if (key === 'last_year') return [new Date(y - 1, 0, 1), new Date(y - 1, 11, 31)];
+    return null;
+  }
+  var keys = ['this_month', 'last_month', 'this_quarter', 'this_year', 'last_year'];
+  if (from.value || to.value) {
+    preset.value = 'custom';
+    keys.forEach(function (k) {
+      var r = range(k);
+      if (from.value === iso(r[0]) && to.value === iso(r[1])) preset.value = k;
+    });
+  }
+  preset.addEventListener('change', function () {
+    if (preset.value === 'custom') { from.focus(); return; }
+    var r = range(preset.value);
+    from.value = r ? iso(r[0]) : '';
+    to.value = r ? iso(r[1]) : '';
+    preset.form.submit();
+  });
+  // Typing a date by hand switches the picker to "Custom range".
+  [from, to].forEach(function (el) {
+    el.addEventListener('change', function () { preset.value = from.value || to.value ? 'custom' : ''; });
+  });
+})();
+</script>
+`;
+%>
+<%- include('partials/foot', { extraScripts }) %>

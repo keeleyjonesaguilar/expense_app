@@ -60,6 +60,11 @@
       --bs-btn-active-bg: var(--brand-teal); --bs-btn-active-border-color: var(--brand-teal);
       --bs-btn-focus-shadow-rgb: 2,103,84;
     }
+    .pagination {
+      --bs-pagination-color: var(--brand-teal); --bs-pagination-hover-color: var(--brand-teal-dark);
+      --bs-pagination-active-bg: var(--brand-teal); --bs-pagination-active-border-color: var(--brand-teal);
+      --bs-pagination-focus-box-shadow: 0 0 0 .25rem rgba(2,103,84,.25);
+    }
     .bg-primary { background-color: var(--brand-teal) !important; }
     .text-primary { color: var(--brand-teal) !important; }
     .form-control:focus, .form-select:focus {
@@ -105,6 +110,17 @@ const isTransactionsHubActive = ['/admin/transactions', '/admin/import', '/admin
       </ul>
       <ul class="navbar-nav">
         <% if (currentUser.is_authenticated) { %>
+          <% if (currentUser.is_admin) { %>
+            <% const nReview = typeof reviewCount !== 'undefined' ? reviewCount : 0; %>
+            <li class="nav-item">
+              <a class="nav-link d-flex align-items-center gap-1<%= isActive('/admin/review') %>" href="/admin/review"
+                 title="<%= nReview ? nReview + ' item(s) need review' : 'Nothing needs review' %>">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 16a2 2 0 0 0 2-2H6a2 2 0 0 0 2 2zm.995-14.901a1 1 0 1 0-1.99 0A5.002 5.002 0 0 0 3 6c0 1.098-.5 6-2 7h14c-1.5-1-2-5.902-2-7 0-2.42-1.72-4.44-4.005-4.901z"/></svg>
+                Review
+                <% if (nReview) { %><span class="badge rounded-pill bg-danger"><%= nReview %></span><% } %>
+              </a>
+            </li>
+          <% } %>
           <li class="nav-item"><span class="nav-link text-muted"><%= currentUser.name %> (<%= currentUser.role %>)</span></li>
           <li class="nav-item"><a class="nav-link<%= isActive('/account/security') %>" href="/account/security">Security</a></li>
           <li class="nav-item"><a class="nav-link" href="/logout">Log out</a></li>

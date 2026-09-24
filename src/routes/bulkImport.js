@@ -253,11 +253,13 @@ router.post('/admin/import/:uploadId/commit', (req, res) => {
   const insertTx = db.prepare(`
     INSERT INTO transactions
       (date, amount, description, notes, link, quantity, unit_price, category_id, vendor_id,
-       employee_id, is_one_time, source, status, approved_by_id, approved_at, extracted_raw_text, upload_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?)
+       employee_id, is_one_time, source, status, approved_by_id, approved_at, extracted_raw_text, upload_id,
+       review_reason)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, ?, ?)
   `);
 
   let imported = 0;
+  let flaggedForReview = 0;
   const n = rows.length;
   for (let i = 0; i < n; i++) {
     if (req.body[`skip_${i}`]) continue;
@@ -280,6 +282,13 @@ router.post('/admin/import/:uploadId/commit', (req, res) => {
     const link = (req.body[`link_${i}`] || '').trim() || null;
     const employeeIdRaw = req.body[`employee_id_${i}`] ? parseInt(req.body[`employee_id_${i}`], 10) : null;
     const employeeId = employeeIdRaw && employeeIds.has(employeeIdRaw) ? employeeIdRaw : null;
+    // A row committed without a matching category still imports, but lands
+    // in the Needs Review queue (nav bell) instead of silently sitting in
+    // the ledger as "Uncategorized".
+    const suggested = (rows[i].suggested_category || '').trim();
+    const reviewReason = catId
+      ? null
+      : `No matching category${suggested ? ` (import suggested "${suggested}")` : ''}`;
 
     const info = insertTx.run(
       dateStr,
@@ -297,7 +306,8 @@ router.post('/admin/import/:uploadId/commit', (req, res) => {
       STATUS_APPROVED,
       req.currentUser.id,
       (rows[i].raw_text || '').slice(0, 5000),
-      uploadId
+      uploadId,
+      reviewReason
     );
 
     // Tag checkboxes for this row: name="tag_<i>" repeated once per checked
@@ -311,12 +321,16 @@ router.post('/admin/import/:uploadId/commit', (req, res) => {
     }
 
     imported += 1;
+    if (reviewReason) flaggedForReview += 1;
   }
 
   db.prepare('UPDATE uploads SET imported_count = ? WHERE id = ?').run(imported, uploadId);
   fs.unlinkSync(previewCachePath(uploadId));
 
   flash(req, 'success', `Imported ${imported} of ${n} rows.`);
+  if (flaggedForReview) {
+    flash(req, 'warning', `${flaggedForReview} imported row(s) didn't match a category and were added to Needs Review.`);
+  }
   res.redirect(`/admin/transactions?upload_id=${uploadId}`);
 });
 

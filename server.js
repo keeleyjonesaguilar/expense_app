@@ -10,7 +10,7 @@ const session = require('express-session');
 // Side-effecting require: opens/creates the SQLite database, creates the
 // schema if missing, seeds the established categories, and bootstraps the
 // first admin account -- mirrors app.py's create_app() startup sequence.
-require('./src/db');
+const db = require('./src/db');
 
 const { attachUser, popFlash } = require('./src/middleware/auth');
 
@@ -40,6 +40,13 @@ app.use(
 
 app.use(attachUser);
 app.use(popFlash);
+
+// Count behind the nav's Review bell (admins only) -- see routes/review.js.
+const countNeedsReview = db.prepare('SELECT COUNT(*) AS n FROM transactions WHERE review_reason IS NOT NULL');
+app.use((req, res, next) => {
+  res.locals.reviewCount = req.currentUser && req.currentUser.role === 'admin' ? countNeedsReview.get().n : 0;
+  next();
+});
 
 // Small view-formatting helpers exposed to every EJS template, standing in
 // for Jinja's strftime/format filters used throughout the original
@@ -77,6 +84,7 @@ app.use(require('./src/routes/auth'));
 app.use(require('./src/routes/security'));
 app.use(require('./src/routes/supplyRequest'));
 app.use(require('./src/routes/expenses'));
+app.use(require('./src/routes/review'));
 app.use(require('./src/routes/admin'));
 app.use(require('./src/routes/bulkImport'));
 app.use(require('./src/routes/marketing'));

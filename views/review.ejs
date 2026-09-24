@@ -1,0 +1,134 @@
+<%- include('partials/head', { title: 'Needs Review' }) %>
+<div class="d-flex justify-content-between align-items-center mb-2">
+  <h3 class="mb-0">Needs Review <% if (total) { %><span class="badge rounded-pill bg-danger align-middle fs-6"><%= total %></span><% } %></h3>
+</div>
+<p class="text-muted small">Items flagged for a second look — for example, an imported row that didn't match any category. Pick the right category and tags and click <strong>Save</strong> to clear it, or <strong>Dismiss</strong> to clear it as-is. Tick several rows to fix them all at once.</p>
+
+<% if (!total) { %>
+  <div class="card"><div class="card-body text-center text-muted py-5">Nothing needs review right now.</div></div>
+<% } else { %>
+
+<div class="d-flex flex-wrap gap-2 mb-3">
+  <a href="/admin/review" class="btn btn-sm <%= !reason ? 'btn-primary' : 'btn-outline-secondary' %>">All <span class="badge bg-light text-dark ms-1"><%= total %></span></a>
+  <% reasons.forEach(function (r) { %>
+    <a href="/admin/review?reason=<%= encodeURIComponent(r.reason) %>" class="btn btn-sm text-start <%= reason === r.reason ? 'btn-primary' : 'btn-outline-secondary' %>" style="max-width:420px; white-space:normal;">
+      <%= r.reason.split('. Suggested:')[0] %> <span class="badge bg-light text-dark ms-1"><%= r.n %></span>
+    </a>
+  <% }) %>
+</div>
+
+<% if (!txs.length) { %>
+  <div class="card"><div class="card-body text-center text-muted py-4">No items match this filter. <a href="/admin/review">Show all</a></div></div>
+<% } else { %>
+
+<form id="bulk-form" method="post" action="/admin/review/bulk">
+  <input type="hidden" name="next" value="<%= currentUrl %>">
+  <div class="card mb-3"><div class="card-body py-2" data-tag-scope>
+    <div class="row g-2 align-items-end">
+      <div class="col-12 col-md-auto"><span class="small fw-semibold">With selected (<span id="sel-count">0</span>):</span></div>
+      <div class="col-auto">
+        <label class="form-label small mb-0">Category</label>
+        <select name="category_id" class="form-select form-select-sm" data-tag-category-select>
+          <option value="">Choose...</option>
+          <% categories.forEach(function (c) { %><option value="<%= c.id %>"><%= c.name %></option><% }) %>
+        </select>
+      </div>
+      <div class="col-12 col-md">
+        <label class="form-label small mb-0 d-block">Tags</label>
+        <% tags.forEach(function (tg) { %>
+          <div class="form-check form-check-inline" data-tag-category="<%= tg.category_id %>">
+            <input type="checkbox" class="form-check-input" name="tag" value="<%= tg.name %>" id="bulktag-<%= tg.id %>">
+            <label class="form-check-label small" for="bulktag-<%= tg.id %>"><%= tg.name %></label>
+          </div>
+        <% }) %>
+        <span class="small text-muted d-none" data-tag-empty></span>
+      </div>
+      <div class="col-auto">
+        <button class="btn btn-primary btn-sm" name="action" value="save">Apply &amp; clear</button>
+        <button class="btn btn-outline-secondary btn-sm" name="action" value="dismiss">Dismiss</button>
+      </div>
+    </div>
+  </div></div>
+</form>
+
+<div class="card table-responsive">
+<table class="table table-sm mb-0 align-middle">
+  <thead class="table-light">
+    <tr>
+      <th><input type="checkbox" class="form-check-input" id="select-all" title="Select all"></th>
+      <th>Date</th><th>Item</th><th class="text-end">Total</th><th>Why it's flagged</th><th>Now</th><th style="min-width:320px">Fix</th>
+    </tr>
+  </thead>
+  <tbody>
+    <% txs.forEach(function (t) { %>
+    <tr data-tag-scope>
+      <td><input type="checkbox" class="form-check-input row-select" name="ids" value="<%= t.id %>" form="bulk-form"></td>
+      <td class="text-nowrap"><%= fmtDate(t.date) %></td>
+      <td style="max-width:320px">
+        <div class="small"><% if (t.link) { %><a href="<%= t.link %>" target="_blank" rel="noopener"><%= t.description || '(no description)' %></a><% } else { %><%= t.description || '(no description)' %><% } %></div>
+        <div class="small text-muted"><%= t.vendor ? t.vendor.name : '' %><%= t.quantity ? ` · qty ${t.quantity}` : '' %></div>
+      </td>
+      <td class="text-end text-nowrap">$<%= fmtMoney(t.amount) %></td>
+      <td class="small" style="max-width:260px"><%= t.review_reason %></td>
+      <td class="small">
+        <%= t.category ? t.category.name : 'Uncategorized' %>
+        <div><% (t.tags || []).forEach(function (tn) { %><span class="badge bg-secondary me-1"><%= tn %></span><% }) %></div>
+      </td>
+      <td>
+        <select name="category_id" class="form-select form-select-sm mb-1" form="row-<%= t.id %>" data-tag-category-select>
+          <option value="" <%= !t.category_id ? 'selected' : '' %>>Choose...</option>
+          <% categories.forEach(function (c) { %><option value="<%= c.id %>" <%= t.category_id === c.id ? 'selected' : '' %>><%= c.name %></option><% }) %>
+        </select>
+        <div class="mb-1">
+          <% tags.forEach(function (tg) { %>
+            <div class="form-check form-check-inline" data-tag-category="<%= tg.category_id %>">
+              <input type="checkbox" class="form-check-input" name="tag" value="<%= tg.name %>" id="rtag-<%= t.id %>-<%= tg.id %>" form="row-<%= t.id %>"
+                <%= (t.tags || []).includes(tg.name) ? 'checked' : '' %>>
+              <label class="form-check-label small" for="rtag-<%= t.id %>-<%= tg.id %>"><%= tg.name %></label>
+            </div>
+          <% }) %>
+          <span class="small text-muted d-none" data-tag-empty></span>
+        </div>
+        <button class="btn btn-primary btn-sm" name="action" value="save" form="row-<%= t.id %>">Save</button>
+        <button class="btn btn-outline-secondary btn-sm" name="action" value="dismiss" form="row-<%= t.id %>">Dismiss</button>
+      </td>
+    </tr>
+    <% }) %>
+  </tbody>
+</table>
+</div>
+
+<%# Per-row forms live outside the table (forms can't nest, and a <form>
+    can't wrap a <tr>); each row's controls join theirs via form="row-N". %>
+<% txs.forEach(function (t) { %>
+  <form id="row-<%= t.id %>" method="post" action="/admin/review/<%= t.id %>"><input type="hidden" name="next" value="<%= currentUrl %>"></form>
+<% }) %>
+
+<% } %>
+<% } %>
+<%
+const extraScripts = `
+<script>
+(function () {
+  var all = document.getElementById('select-all');
+  var boxes = document.querySelectorAll('.row-select');
+  var count = document.getElementById('sel-count');
+  if (!all || !count) return;
+  function update() {
+    var n = 0;
+    boxes.forEach(function (b) { if (b.checked) n += 1; });
+    count.textContent = n;
+    all.checked = n > 0 && n === boxes.length;
+    all.indeterminate = n > 0 && n < boxes.length;
+  }
+  all.addEventListener('change', function () {
+    boxes.forEach(function (b) { b.checked = all.checked; });
+    update();
+  });
+  boxes.forEach(function (b) { b.addEventListener('change', update); });
+  update();
+})();
+</script>
+`;
+%>
+<%- include('partials/foot', { extraScripts }) %>
